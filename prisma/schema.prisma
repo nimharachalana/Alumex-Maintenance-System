@@ -1,6 +1,7 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -10,10 +11,11 @@ generator client {
 model User {
   id        String   @id @default(cuid())
   epf       String   @unique
-  password  String
+  password  String   @default("tech123")
   role      String   @default("TECHNICIAN") // "TECHNICIAN", "SUPERVISOR", "ADMIN"
   name      String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   inspections Inspection[]
 }
@@ -42,7 +44,7 @@ model Checkpoint {
 }
 
 model Inspection {
-  id             String    @id // e.g. "INS-ext-1-2026-11-08-Shift1"
+  id             String    @id // e.g. "INS-ext-1-2026-11-08"
   stationId      String
   station        Station   @relation(fields: [stationId], references: [id])
   userId         String?
@@ -51,11 +53,8 @@ model Inspection {
   inspectionDate String    // YYYY-MM-DD
   day            Int
   month          String    // YYYY-MM
-  shift          String
-  remarks        String?
-  signatureUrl   String?
-  submittedAt    Int       // Epoch ms
-  lastModifiedAt Int       // Epoch ms
+  submittedAt    BigInt    // Epoch ms (13-digit timestamp)
+  lastModifiedAt BigInt    // Epoch ms
 
   items          InspectionItemResult[]
 }
@@ -66,7 +65,6 @@ model InspectionItemResult {
   inspection   Inspection  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   checkpointId String
   checkpoint   Checkpoint  @relation(fields: [checkpointId], references: [id])
-  status       String      // "√", "X", "0"
-  reading      String?
+  status       String      // "OK", "DEFECT", "STANDBY"
+  defectNote   String?     // Observation / defect detail note for this checkpoint
 }
-

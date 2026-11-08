@@ -25,7 +25,14 @@ export async function GET(request: NextRequest) {
       orderBy: { submittedAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, data: inspections });
+    // Safely serialize BigInt to Number for JSON responses
+    const serialized = inspections.map((ins) => ({
+      ...ins,
+      submittedAt: Number(ins.submittedAt),
+      lastModifiedAt: Number(ins.lastModifiedAt),
+    }));
+
+    return NextResponse.json({ success: true, data: serialized });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
@@ -41,11 +48,7 @@ export async function POST(request: NextRequest) {
       inspectionDate,
       day,
       month,
-      shift,
-      remarks,
-      signatureUrl,
       records,
-      isAdmin = false,
     } = body;
 
     if (!id || !stationId || !records || !Array.isArray(records)) {
@@ -54,20 +57,20 @@ export async function POST(request: NextRequest) {
 
     const now = Date.now();
 
-    // Check existing record for 30-minute lockout rule
+    // Check existing record for strict 30-minute lockout rule
     const existing = await db.inspection.findUnique({
       where: { id },
     });
 
-    let originalTime = now;
+    let originalTime = BigInt(now);
     if (existing) {
       originalTime = existing.submittedAt;
-      const elapsed = now - existing.submittedAt;
-      if (elapsed > LOCKOUT_DURATION_MS && !isAdmin) {
+      const elapsed = now - Number(existing.submittedAt);
+      if (elapsed > LOCKOUT_DURATION_MS) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Compliance Rejected: 30 minutes have elapsed since original submission. Values are permanently locked.',
+            error: 'Compliance Lockout: 30 minutes have elapsed since submission. Records are permanently locked and cannot be modified.',
           },
           { status: 403 }
         );
@@ -84,16 +87,11 @@ export async function POST(request: NextRequest) {
         inspectionDate: inspectionDate || new Date().toISOString().slice(0, 10),
         day: day || new Date().getDate(),
         month: month || new Date().toISOString().slice(0, 7),
-        shift: shift || 'Shift 1',
-        remarks: remarks || '',
-        signatureUrl: signatureUrl || null,
         submittedAt: originalTime,
-        lastModifiedAt: now,
+        lastModifiedAt: BigInt(now),
       },
       update: {
-        remarks: remarks || '',
-        signatureUrl: signatureUrl || undefined,
-        lastModifiedAt: now,
+        lastModifiedAt: BigInt(now),
       },
     });
 
@@ -102,7 +100,7 @@ export async function POST(request: NextRequest) {
       where: { inspectionId: id },
     });
 
-    // Bulk insert items
+    // Insert items with checkpoint defectNote
     for (const r of records) {
       let checkpointId = r.checkpointId;
       if (!checkpointId) {
@@ -122,17 +120,16 @@ export async function POST(request: NextRequest) {
           data: {
             inspectionId: id,
             checkpointId,
-            status: r.status || '√',
-            reading: r.reading || '',
+            status: r.status || 'OK',
+            defectNote: r.defectNote || '',
           },
         });
       }
     }
 
-    return NextResponse.json({ success: true, id: saved.id, submittedAt: originalTime });
+    return NextResponse.json({ success: true, id: saved.id, submittedAt: Number(originalTime) });
   } catch (error: any) {
     console.error('Inspection save error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
-
