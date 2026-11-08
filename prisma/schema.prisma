@@ -1,0 +1,72 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  epf       String   @unique
+  password  String
+  role      String   @default("TECHNICIAN") // "TECHNICIAN", "SUPERVISOR", "ADMIN"
+  name      String
+  createdAt DateTime @default(now())
+
+  inspections Inspection[]
+}
+
+model Station {
+  id          String       @id
+  code        String
+  name        String
+  plant       String       // "EXTRUSION" or "VPC"
+  docRef      String       // "CH/MT/102" or "LS/MT/102"
+  qrTag       String       @unique
+  checkpoints Checkpoint[]
+  inspections Inspection[]
+}
+
+model Checkpoint {
+  id              String   @id @default(cuid())
+  stationId       String
+  station         Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  equipmentName   String
+  itemName        String
+  lookForCriteria String
+  orderIndex      Int      @default(0)
+
+  results         InspectionItemResult[]
+}
+
+model Inspection {
+  id             String    @id // e.g. "INS-ext-1-2026-11-08-Shift1"
+  stationId      String
+  station        Station   @relation(fields: [stationId], references: [id])
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id])
+  epf            String
+  inspectionDate String    // YYYY-MM-DD
+  day            Int
+  month          String    // YYYY-MM
+  shift          String
+  remarks        String?
+  signatureUrl   String?
+  submittedAt    Int       // Epoch ms
+  lastModifiedAt Int       // Epoch ms
+
+  items          InspectionItemResult[]
+}
+
+model InspectionItemResult {
+  id           String      @id @default(cuid())
+  inspectionId String
+  inspection   Inspection  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  checkpointId String
+  checkpoint   Checkpoint  @relation(fields: [checkpointId], references: [id])
+  status       String      // "√", "X", "0"
+  reading      String?
+}
+

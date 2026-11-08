@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Alumex Plant Maintenance Portal | Extrusion & VPC</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Pre-configured Decentralized Real-Time Sync Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    #qr-reader video { width: 100% !important; height: auto !important; border-radius: 12px; }
+    #qr-reader { border: none !important; }
+    .locked-field { opacity: 0.65; cursor: not-allowed !important; pointer-events: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <!-- NAVIGATION BAR -->
+  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center text-slate-900 font-black text-xl shadow">
+          <i class="fas fa-industry"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold leading-tight">Alumex Maintenance System</h1>
+          <p class="text-xs text-slate-400">Extrusion (CH/MT/102) & VPC (LS/MT/102)</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span id="roleBadge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-slate-800 border border-slate-700 text-amber-400">Not Logged In</span>
+        <button onclick="openSyncModal()" id="cloudStatusBtn" class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition">
+          <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="cloudStatusText">Live Synced</span>
+        </button>
+        <button id="logoutBtn" onclick="logout()" class="hidden text-xs bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg transition font-medium">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 sm:p-6 pb-24">
+    <!-- AUTH SCREEN -->
+    <div id="authScreen" class="max-w-md mx-auto mt-6 bg-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-200">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3 shadow-inner">
+          <i class="fas fa-industry"></i>
+        </div>
+        <h2 class="text-2xl font-black text-slate-900">Portal Login</h2>
+        <p class="text-xs text-slate-500 mt-1">Multi-User Plant Maintenance Access</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl mb-5">
+        <button type="button" id="roleTabTech" onclick="setAuthRole('tech')" class="py-2.5 text-xs font-bold rounded-lg bg-white shadow-sm text-blue-600 transition">
+          <i class="fas fa-wrench mr-1"></i> Technician
+        </button>
+        <button type="button" id="roleTabAdmin" onclick="setAuthRole('admin')" class="py-2.5 text-xs font-bold rounded-lg text-slate-600 transition">
+          <i class="fas fa-user-shield mr-1"></i> Supervisor / Admin
+        </button>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+        <div id="epfField">
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Technician EPF No</label>
+          <input type="text" id="epfInput" placeholder="e.g. EPF-4820" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Password</label>
+          <div class="relative">
+            <input type="password" id="passInput" placeholder="tech123 (Tech) or admin123 (Admin)" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+            <button type="button" onclick="togglePassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-sm">
+              <i class="fas fa-eye" id="passEyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="loginErrorMsg" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium"></div>
+
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/25 active:scale-[0.98] transition">
+          Sign In to Portal
+        </button>
+
+        <!-- Instant One-Click Login -->
+        <div class="pt-3 border-t border-slate-100">
+          <div class="text-[11px] font-bold text-slate-400 uppercase text-center mb-2">Quick Floor Access</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="quickLogin('tech')" class="py-2 px-3 bg-slate-50 hover:bg-blue-50 border border-slate-200 text-slate-700 hover:text-blue-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+              <i class="fas fa-sign-in-alt text-blue-500"></i> Tech (tech123)
+            </button>
+            <button type="button" onclick="quickLogin('admin')" class="py-2 px-3 bg-slate-50 hover:bg-amber-50 border border-slate-200 text-slate-700 hover:text-amber-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+              <i class="fas fa-user-lock text-amber-500"></i> Admin (admin123)
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- TECHNICIAN PORTAL -->
+    <div id="techPortal" class="hidden space-y-6">
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <span class="text-xs uppercase font-bold text-blue-600 tracking-wider">Field Inspection Mode</span>
+          <h2 class="text-xl font-black text-slate-900" id="techGreeting">Welcome Technician</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Rule: Scan machine panel QR tag to load checklist. Records can be modified within <b>30 minutes</b> of marking.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="generateSyncQR()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow text-xs">
+            <i class="fas fa-share-alt"></i> Share to Laptop (QR)
+          </button>
+        </div>
+      </div>
+
+      <!-- MACHINE PANEL QR SCANNER SECTION (Dedicated Tab - Replaces Manual Grid Box) -->
+      <div id="techScannerSection" class="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        <div class="flex flex-wrap justify-between items-center gap-2 border-b pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+              <h3 class="font-black text-slate-900 text-base">Machine Panel QR Scanner</h3>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Walk up to the machine panel and scan its QR tag to load the official checklist.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" id="startFloorCamBtn" onclick="startFloorScanner()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow transition">
+              <i class="fas fa-camera"></i> Start Live Camera
+            </button>
+            <button type="button" id="stopFloorCamBtn" onclick="stopFloorScanner()" class="hidden bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 transition">
+              <i class="fas fa-stop"></i> Stop Camera
+            </button>
+          </div>
+        </div>
+
+        <!-- Camera Viewfinder Window -->
+        <div class="relative bg-slate-950 rounded-2xl overflow-hidden min-h-[260px] flex items-center justify-center border border-slate-800 shadow-inner">
+          <div id="floor-qr-reader" class="w-full"></div>
+          <div id="floorScannerPlaceholder" class="text-center p-6 space-y-2">
+            <div class="w-14 h-14 bg-slate-800 text-blue-400 rounded-2xl flex items-center justify-center text-2xl mx-auto shadow-inner">
+              <i class="fas fa-qrcode"></i>
+            </div>
+            <div class="text-xs font-bold text-slate-200">Point Camera at Machine Panel Tag</div>
+            <p class="text-[11px] text-slate-400 max-w-xs mx-auto">Click "Start Live Camera" to scan, or select a photo of the panel QR code from your gallery.</p>
+          </div>
+        </div>
+
+        <div id="floorScannerAlert" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs"></div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+          <label class="font-bold text-slate-600 flex items-center gap-2 cursor-pointer hover:text-blue-600 transition">
+            <i class="fas fa-image text-blue-500 text-sm"></i> Or Select Tag Photo from Gallery
+            <input type="file" id="floorQRFileInput" accept="image/*" onchange="handleFloorQRFileScan(event)" class="hidden">
+          </label>
+          <button type="button" onclick="toggleFloorSimulator()" class="text-[11px] font-bold text-slate-400 hover:text-blue-600 underline">
+            Quick Station Simulator (Floor Dev/Test)
+          </button>
+        </div>
+
+        <!-- Collapsible Floor Simulator for testing without physical printout -->
+        <div id="floorSimulatorContainer" class="hidden pt-3 border-t border-slate-100 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-slate-500 uppercase">Simulate Machine Tag Scan (Click to test):</span>
+            <span class="text-[10px] text-slate-400">13 Master Stations</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5" id="floorSimButtons"></div>
+        </div>
+      </div>
+
+      <!-- Checklist Form Container -->
+      <div id="checklistFormContainer" class="hidden bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+        <div class="border-b pb-4 flex justify-between items-start">
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="formPlantBadge" class="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700"></span>
+              <span id="formLockBadge" class="hidden text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 flex items-center gap-1"></span>
+            </div>
+            <h3 id="formStationTitle" class="text-xl font-black text-slate-900 mt-1"></h3>
+            <p id="formDocNo" class="text-xs text-slate-500"></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeChecklistFormAndScan()" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex items-center gap-1.5 transition">
+              <i class="fas fa-qrcode"></i> Scan Another Machine
+            </button>
+            <button onclick="closeChecklistForm()" class="text-slate-400 hover:text-slate-600 text-lg p-2" title="Close"><i class="fas fa-times"></i></button>
+          </div>
+        </div>
+
+        <!-- 30-MINUTE LOCKOUT STATUS BANNER -->
+        <div id="lockoutBanner" class="hidden p-4 rounded-2xl border text-xs"></div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl text-xs">
+          <div><span class="text-slate-400 block font-medium">Date</span><b id="formDate"></b></div>
+          <div><span class="text-slate-400 block font-medium">Shift</span>
+            <select id="formShift" onchange="onShiftChange()" class="bg-white border rounded px-1.5 py-0.5 font-bold outline-none">
+              <option value="Shift 1">Shift 1 (Morning)</option>
+              <option value="Shift 2" selected>Shift 2 (Evening)</option>
+              <option value="Shift 3">Shift 3 (Night)</option>
+            </select>
+          </div>
+          <div><span class="text-slate-400 block font-medium">Inspector EPF</span><b id="formEPF"></b></div>
+          <div><span class="text-slate-400 block font-medium">Checkpoints</span><b id="formTotalCount" class="text-blue-600"></b></div>
+        </div>
+
+        <!-- Items Table -->
+        <div class="space-y-3" id="checklistRows"></div>
+
+        <!-- Notes & Signature -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t" id="submissionBottomSection">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Defects / Observations</label>
+            <textarea id="technicianRemarks" rows="3" placeholder="Enter notes..." class="w-full p-3 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs font-bold text-slate-600 uppercase">Technician Signature</label>
+              <button type="button" id="clearSigBtn" onclick="clearTechSignature()" class="text-[11px] text-rose-500 hover:underline">Clear</button>
+            </div>
+            <div class="border border-slate-300 rounded-xl bg-slate-50 overflow-hidden">
+              <canvas id="techSigPad" width="340" height="90" class="w-full cursor-crosshair touch-none"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <button id="submitBtn" onclick="submitChecklistForm()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+          <i class="fas fa-check-circle"></i> <span id="submitBtnText">Submit Station Inspection</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- SUPERVISOR / ADMIN DASHBOARD -->
+    <div id="adminPortal" class="hidden space-y-6">
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <span class="text-xs uppercase font-bold text-amber-600 tracking-wider">Engineering Admin Portal</span>
+          <h2 class="text-xl font-black text-slate-900">Plant Audit & Review Dashboard</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Multi-User Plant Coverage: Inspect submissions, view 30-min lock status, review parameters & export official Excel reports.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="scanSyncQRFromLaptop()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow transition">
+            <i class="fas fa-camera"></i> Scan Phone to Import
+          </button>
+          <button onclick="downloadMonthlyExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow transition">
+            <i class="fas fa-file-excel"></i> Download Excel (.xlsx)
+          </button>
+          <button onclick="openQRPrintModal()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow transition">
+            <i class="fas fa-print"></i> Station QR Tags
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters & KPI Metrics -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-xs text-slate-400 font-semibold uppercase">Inspection Month</span>
+          <input type="month" id="adminMonthPicker" onchange="renderAdminMatrix()" class="mt-1 w-full font-bold text-slate-800 bg-slate-50 border rounded-lg px-2 py-1 text-sm outline-none">
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-xs text-slate-400 font-semibold uppercase">Filter Plant</span>
+          <select id="adminPlantFilter" onchange="renderAdminMatrix()" class="mt-1 w-full font-bold text-slate-800 bg-slate-50 border rounded-lg px-2 py-1 text-sm outline-none">
+            <option value="ALL">All Plants (146 Checkpoints)</option>
+            <option value="EXTRUSION">Extrusion Plant (CH/MT/102 - 84 Checks)</option>
+            <option value="VPC">VPC Plant (LS/MT/102 - 62 Checks)</option>
+          </select>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-xs text-slate-400 font-semibold uppercase">Total Master Checkpoints</span>
+          <div class="text-2xl font-black text-slate-900 mt-1" id="kpiTotalCheckpoints">146</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span class="text-xs text-slate-400 font-semibold uppercase">Open Defects (X)</span>
+          <div class="text-2xl font-black text-rose-600 mt-1" id="kpiDefects">0</div>
+        </div>
+      </div>
+
+      <!-- 1-31 Day Monthly Audit Review Matrix -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-4 bg-slate-50 border-b flex justify-between items-center flex-wrap gap-2">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">Monthly Verification Grid (Days 1 to 31)</h3>
+            <p class="text-xs text-slate-500">Condition OK: √ (Green) | Not OK: X (Red) | Standby: 0 (Gray) | Click any rated cell for detailed inspection & time log</p>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="inline-flex items-center gap-1 font-semibold text-emerald-700"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> OK (√)</span>
+            <span class="inline-flex items-center gap-1 font-semibold text-rose-700 ml-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Defect (X)</span>
+            <span class="inline-flex items-center gap-1 font-semibold text-slate-500 ml-2"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Standby (0)</span>
+          </div>
+        </div>
+        <div class="overflow-x-auto scrollbar-thin max-h-[550px]">
+          <table class="w-full text-xs text-left border-collapse" id="auditMatrixTable">
+            <thead class="bg-slate-100 sticky top-0 z-20 text-slate-700 uppercase font-bold text-[10px]" id="matrixThead"></thead>
+            <tbody id="matrixTbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- CELL DETAIL INSPECTION MODAL (FOR SUPERVISORS) -->
+  <div id="cellDetailModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-clipboard-check text-emerald-400"></i>
+          <h3 class="font-bold text-sm" id="detailModalTitle">Inspection Audit Detail</h3>
+        </div>
+        <button onclick="closeCellDetailModal()" class="text-slate-400 hover:text-white p-1 text-lg">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-3.5 text-xs" id="detailModalContent"></div>
+      <div class="p-4 bg-slate-50 border-t flex justify-end">
+        <button onclick="closeCellDetailModal()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold">
+          Close Audit Window
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHONE TO LAPTOP SYNC MODAL -->
+  <div id="syncQRModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
+      <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-xl mx-auto">
+        <i class="fas fa-qrcode"></i>
+      </div>
+      <h3 class="font-bold text-base text-slate-900">Direct Screen-to-Screen Sync</h3>
+      <p class="text-xs text-slate-500">Show this QR code to the supervisor laptop webcam to transfer all plant records immediately!</p>
+      <div class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-center shadow-inner">
+        <div id="syncQRCanvas"></div>
+      </div>
+      <button onclick="document.getElementById('syncQRModal').classList.add('hidden')" class="w-full bg-slate-900 text-white font-bold py-2.5 rounded-xl text-xs">
+        Done / Close
+      </button>
+    </div>
+  </div>
+
+  <!-- CLOUD SYNC & CROSS-DEVICE DATA MODAL -->
+  <div id="syncModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-satellite-dish text-emerald-400"></i>
+          <h3 class="font-bold text-sm">Real-Time Sync Engine</h3>
+        </div>
+        <button onclick="closeSyncModal()" class="text-slate-400 hover:text-white p-1 text-lg">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4 text-xs">
+        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-2.5">
+          <i class="fas fa-check-circle text-emerald-600 text-base mt-0.5"></i>
+          <div>
+            <b>Multi-User Mesh Active:</b>
+            <p class="mt-0.5 text-slate-600">Whenever any technician on the plant floor marks an inspection, it automatically synchronizes to all connected supervisors and laptops.</p>
+          </div>
+        </div>
+        <div class="border-t border-slate-100 pt-3 flex gap-2">
+          <button onclick="exportDataBackup()" class="flex-1 py-2 px-3 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1.5">
+            <i class="fas fa-download text-slate-500"></i> Export Backup (JSON)
+          </button>
+          <label class="flex-1 py-2 px-3 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1.5 cursor-pointer text-center">
+            <i class="fas fa-upload text-slate-500"></i> Import Backup
+            <input type="file" accept=".json" onchange="importDataBackup(event)" class="hidden">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE QR SCANNER MODAL -->
+  <div id="qrScannerModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-qrcode text-amber-400"></i>
+          <h3 class="font-bold text-sm">Scan QR Code</h3>
+        </div>
+        <button onclick="closeQRScannerModal()" class="text-slate-400 hover:text-white p-1 text-lg">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div class="relative bg-black rounded-2xl overflow-hidden min-h-[260px] flex items-center justify-center">
+          <div id="qr-reader" class="w-full"></div>
+        </div>
+        <div id="scannerAlert" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs"></div>
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Or Select Photo from Gallery</label>
+          <input type="file" id="qrFileInput" accept="image/*" onchange="handleQRFileScan(event)" class="w-full text-xs text-slate-500 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700">
+        </div>
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5">Quick Station Simulator:</label>
+          <div class="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto scrollbar-thin p-1 bg-slate-50 rounded-xl" id="testButtonsContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR TAG PRINT MODAL -->
+  <div id="qrPrintModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <h3 class="font-bold text-sm">Station QR Tags for Physical Machine Panels</h3>
+        <button onclick="closeQRPrintModal()" class="text-slate-400 hover:text-white text-lg"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="qrCodeCardsContainer"></div>
+      </div>
+      <div class="p-4 bg-slate-50 border-t flex justify-end gap-2">
+        <button onclick="window.print()" class="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl">Print QR Tags</button>
+        <button onclick="closeQRPrintModal()" class="bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // FULL 100% MASTER DATA (84 Extrusion + 62 VPC)
+    const MASTER_DATA = {
+      extrusion: [
+        {
+          id: "ext-1", qr: "EXT-BILLET-PUSHER", code: "01", name: "Billet Loading Cams & Pusher", doc: "CH/MT/102",
+          items: [
+            { eq: "Billet loading cams", it: "Pneumatic jack 1 & 2", lf: "Check Movement, speed, air leakages & brackets tightness" },
+            { eq: "Billet loading cams", it: "Billet loading jack solenoid", lf: "Check air leakages & coil power supply cable damages" },
+            { eq: "Pusher", it: "Pusher chain & bearings", lf: "Check free movement without tightness in the rail" },
+            { eq: "Pusher", it: "Chain & sprockets", lf: "Check chain & sprockets condition / damages" },
+            { eq: "Pusher", it: "Pusher stop proximity sensor", lf: "Check stop proximity sensor 1 & 2 (NO/NC)" }
+          ]
+        },
+        {
+          id: "ext-2", qr: "EXT-LOG-FURNACE", code: "02", name: "Log Furnace & Blower", doc: "CH/MT/102",
+          items: [
+            { eq: "Log Furnace", it: "LPG gas line", lf: "Check gas pressure before Hi pressure regulator" },
+            { eq: "Log Furnace", it: "LPG gas line", lf: "Check gas pressure after low pressure regulator" },
+            { eq: "Log Furnace", it: "LPG gas line", lf: "Check any LPG gas leakages" },
+            { eq: "Log Furnace", it: "Emergency shut off valve", lf: "Check VRS operation in main line (power off burner)" },
+            { eq: "Log Furnace", it: "Zone 1-4 combustion", lf: "Check burner operation 1-4 & combustion (flue gas smell, temp)" },
+            { eq: "Log Furnace", it: "VRS valve & damper", lf: "Check VRS valve operation of hot air" },
+            { eq: "Log Furnace", it: "Thermocouple probe", lf: "Check condition of function of thermocouple probe (Zone 1-4)" },
+            { eq: "Log Furnace", it: "Pneumatic cylinder", lf: "Check air leakages of pneumatic cylinder" },
+            { eq: "Hydraulic unit", it: "Hydraulic pump", lf: "Main pressure pump valve block 1" },
+            { eq: "Hydraulic unit", it: "Hydraulic pump", lf: "Main pressure pump valve block 2" },
+            { eq: "Hydraulic unit", it: "Hydraulic tank", lf: "Check hydraulic level" },
+            { eq: "Hydraulic unit", it: "DCV valve block", lf: "Check oil leakages in line & valve block" },
+            { eq: "Air circulation blower", it: "Bearing housing", lf: "Check bearing cooling line, oil level & unusual vibration" },
+            { eq: "Plier", it: "Encoder & sensor", lf: "Check CAT 6A of encoder & tightness of proximity sensors" },
+            { eq: "Loader", it: "Servo system", lf: "Movement speed and any unusual sound of servo system" },
+            { eq: "Loader", it: "Cable carrier", lf: "Check cable carrier and cable damages" },
+            { eq: "Loader", it: "IMI jacks", lf: "Air leakages and reed switch function of IMI jacks" }
+          ]
+        },
+        {
+          id: "ext-3", qr: "EXT-EXTRUDER", code: "03", name: "Extruder Main Press", doc: "CH/MT/102",
+          items: [
+            { eq: "Extruder", it: "Hydraulic oil temp", lf: "Normal maximum 140 F (60 C)" },
+            { eq: "Extruder", it: "Oil level", lf: "Check oil level at starting and end position of ram" },
+            { eq: "Extruder", it: "Oil leakages", lf: "Check connections and hoses" },
+            { eq: "Extruder", it: "Shaft surfaces", lf: "Any surface damages/cracks on main and side cylinder shafts" },
+            { eq: "Extruder", it: "Acoustics", lf: "Check unusual sound/noise during extrusion mode" },
+            { eq: "Extruder", it: "Loader alignment", lf: "Check billet loader concentric center to container" },
+            { eq: "Extruder", it: "Stem & container", lf: "Check stem alignment visually concentric with container" },
+            { eq: "Extruder", it: "Side cylinder", lf: "Check oil leakages and bolt tightness" },
+            { eq: "Extruder", it: "Side cylinder shaft", lf: "Check shaft cleanliness / clean nibs or dust" },
+            { eq: "Extruder", it: "Main ram / pre-fill", lf: "Transducer pressure of pre-fill valve when closed" },
+            { eq: "Extruder", it: "TEMPOSONIC transducer", lf: "Check tightness of cat6A and power cable" },
+            { eq: "Extruder", it: "Main cylinder pressure", lf: "Check main cylinder pressure (MX2)" },
+            { eq: "Extruder", it: "Main cylinder nuts", lf: "Check tightness of main cylinder nuts" },
+            { eq: "Extruder", it: "Die slider jack", lf: "Check oil leakages of jack" },
+            { eq: "Extruder", it: "CLIT transducer", lf: "Check CLIT transducer connection" },
+            { eq: "Extruder", it: "Auto lubricator", lf: "Check air supply pressure and solenoid operation" },
+            { eq: "Extruder", it: "Control cabinet", lf: "Check operation of electrical cabinet air conditioner" },
+            { eq: "Extruder", it: "Container jack", lf: "Check oil leakages of jack shaft and visual surface" },
+            { eq: "Extruder", it: "Container valves", lf: "Check oil leakages of related valve block (Item 22)" },
+            { eq: "Extruder", it: "Container sealing", lf: "Container sealing pressure (MX1 Transducer)" },
+            { eq: "Extruder", it: "Container backward", lf: "Container pressure when backward (MX2 Transducer)" },
+            { eq: "Extruder", it: "Thermocouple wire", lf: "Check looseness of thermocouple connection and wire" }
+          ]
+        },
+        {
+          id: "ext-4", qr: "EXT-LEADOUT-HOTSAW", code: "04", name: "Lead Out Table & Hot Saw", doc: "CH/MT/102",
+          items: [
+            { eq: "Lead out table", it: "Hydraulic unit", lf: "Check hydraulic unit oil level and oil cooling process" },
+            { eq: "Lead out table", it: "Run out movement", lf: "Check table up/down movement and limit sensor" },
+            { eq: "Hot saw", it: "Power rail & collector", lf: "Check cleanness and correct movement in the rail" },
+            { eq: "Hot saw", it: "Saw table operation", lf: "Check encoder alarming, running condition & movement" },
+            { eq: "Hot saw", it: "LEUZE unit", lf: "Clean & check tightness of LEUZE communication cable" },
+            { eq: "Hot saw", it: "Compressor", lf: "Check compressor operation and pressure" }
+          ]
+        },
+        {
+          id: "ext-5", qr: "EXT-PULLER-1-2", code: "05", name: "Puller 01 & Puller 02", doc: "CH/MT/102",
+          items: [
+            { eq: "Puller 01", it: "Servo & encoder", lf: "Check puller operation, movement and sound" },
+            { eq: "Puller 01", it: "Puller bed", lf: "Check start/stop without unusual impact" },
+            { eq: "Puller 01", it: "LEUZE unit", lf: "Clean & check cable tightness" },
+            { eq: "Puller 01", it: "Power rail", lf: "Check cleanness and correct rail movement" },
+            { eq: "Puller 01", it: "Hydraulic pressure", lf: "Check hydraulic pressure" },
+            { eq: "Puller 01", it: "Hydraulic level", lf: "Check hydraulic oil level" },
+            { eq: "Puller 01", it: "Hydraulic leaks", lf: "Check oil leakages from jack and valve block" },
+            { eq: "Puller 02", it: "Servo & encoder", lf: "Check puller operation, movement and sound" },
+            { eq: "Puller 02", it: "Puller bed", lf: "Check start/stop without unusual impact" },
+            { eq: "Puller 02", it: "LEUZE unit", lf: "Clean & check cable tightness" },
+            { eq: "Puller 02", it: "Power rail", lf: "Check cleanness and correct rail movement" },
+            { eq: "Puller 02", it: "Hydraulic pressure", lf: "Check hydraulic pressure" },
+            { eq: "Puller 02", it: "Hydraulic level", lf: "Check hydraulic oil level" },
+            { eq: "Puller 02", it: "Hydraulic leaks", lf: "Check oil leakages from jack and valve block" }
+          ]
+        },
+        {
+          id: "ext-6", qr: "EXT-RUNOUT-TRANSFERS", code: "06", name: "Run Out Table & Transfers", doc: "CH/MT/102",
+          items: [
+            { eq: "Run out table", it: "Table bed", lf: "Check table up/down operation and proximity limit" },
+            { eq: "K1 Transfer", it: "Shaft & motor", lf: "Check shaft connection and chain sprockets visually" },
+            { eq: "K2 Transfer", it: "Shaft & motor", lf: "Check shaft connection and chain sprockets visually" },
+            { eq: "K2 Transfer", it: "Pneumatic jacks", lf: "Check air leakages of all jacks" },
+            { eq: "T3 Transfer", it: "Shaft & motor", lf: "Check shaft connection and chain sprockets visually" },
+            { eq: "T4 Transfer", it: "Shaft & motor", lf: "Check shaft connection and chain sprockets visually" }
+          ]
+        },
+        {
+          id: "ext-7", qr: "EXT-STRETCHER-CUTTER", code: "07", name: "Stretcher & Second Cutter", doc: "CH/MT/102",
+          items: [
+            { eq: "Feeding table", it: "Chain & sprockets", lf: "Check damages and free rotation" },
+            { eq: "Feeding table", it: "Table bed", lf: "Table up and down operation" },
+            { eq: "Stretcher head", it: "Hydraulic unit", lf: "Check hydraulic level and pressure" },
+            { eq: "Stretcher head", it: "Oil leakages", lf: "Check oil leakages" },
+            { eq: "Stretcher head", it: "SICK DL 50", lf: "Check connection and inputs of SICK DL 50" },
+            { eq: "Stretcher head", it: "Sensors", lf: "Check and tighten all sensor brackets and clamps" },
+            { eq: "Stretcher tail stock", it: "Encoders", lf: "Check connection and encoder connections" },
+            { eq: "Stretcher tail stock", it: "Hydraulic unit", lf: "Check hydraulic level and pressure" },
+            { eq: "Stretcher tail stock", it: "Oil leakages", lf: "Check oil leakages" },
+            { eq: "Stretcher tail stock", it: "Sensors", lf: "Check and tighten all sensor brackets and clamps" },
+            { eq: "Second cutter", it: "Blade forward jacks", lf: "Check hydraulic operation" },
+            { eq: "Second cutter", it: "Pneumatic jacks", lf: "Check air leakages of bed & stopper cylinder" },
+            { eq: "Second cutter", it: "Stopper encoder", lf: "Check tightness of connections" },
+            { eq: "Second cutter", it: "Sensors", lf: "Clean & check through beam and proximity sensors" }
+          ]
+        }
+      ],
+      vpc: [
+        {
+          id: "vpc-1", qr: "VPC-PRE-TREATMENT", code: "01", name: "Pre Treatment Tunnel", doc: "LS/MT/102",
+          items: [
+            { eq: "Pre Treatment Tunnel", it: "Pump 1 - Rinsing Tank", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 2 - Etching Bath 1", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "Heater 1 - Etching Bath 1", lf: "Check electrical power supply for heating element" },
+            { eq: "Pre Treatment Tunnel", it: "Heater 2 - Etching Bath 1", lf: "Check electrical power supply for heating element" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - Etching Bath 1", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 3 - Etching Bath 2", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 4 - Etching Bath 2", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "Heater 3 - Etching Bath 2", lf: "Check electrical power supply for heating element" },
+            { eq: "Pre Treatment Tunnel", it: "Heater 4 - Etching Bath 2", lf: "Check electrical power supply for heating element" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - Etching Bath 2", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 5 - Rinsing Tank", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - Rinsing Tank", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 6 - Rinsing Tank", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - Rinsing Tank 2", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 7 - DI Rinsing Tank", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - DI Rinsing Tank", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 8 - DI Rinsing Tank", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - DI Rinsing Tank 2", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 9 - Pure DI Tank", lf: "Pump motor vibration and sound" },
+            { eq: "Pre Treatment Tunnel", it: "PVC pipes - Pure DI Tank", lf: "Leaks or any damages" },
+            { eq: "Pre Treatment Tunnel", it: "Heater 5 - Conversion Bath", lf: "Check electrical power supply for heating element" },
+            { eq: "Pre Treatment Tunnel", it: "Pump 10 - Conversion Bath", lf: "Operation of pump motor" },
+            { eq: "Pre Treatment Tunnel", it: "Pipe pneumatic solenoid", lf: "Operation of solenoid valve" }
+          ]
+        },
+        {
+          id: "vpc-2", qr: "VPC-DRYING-OVEN", code: "02", name: "Drying Oven", doc: "LS/MT/102",
+          items: [
+            { eq: "Drying Oven", it: "Burner operation", lf: "Burner low flame, high flame, pause modes" },
+            { eq: "Drying Oven", it: "Vibrations & noises", lf: "Vibrations and noises" },
+            { eq: "Drying Oven", it: "Inlet gas pressure", lf: "Pressure Gauge 1 reading" },
+            { eq: "Drying Oven", it: "mbar Gas pressure", lf: "Pressure Gauge 2 reading" },
+            { eq: "Drying Oven", it: "Fuel leakages", lf: "LPG or Diesel leakages" },
+            { eq: "Drying Oven", it: "Burner cleanliness", lf: "Cleanness of burner unit" },
+            { eq: "Drying Oven", it: "Blower fan", lf: "Blower fan operation (sound or vibrations)" }
+          ]
+        },
+        {
+          id: "vpc-3", qr: "VPC-POWDER-BOOTH", code: "03", name: "Powder Booth", doc: "LS/MT/102",
+          items: [
+            { eq: "Powder Booth", it: "Wiper guide", lf: "Wiper guide clearance" },
+            { eq: "Powder Booth", it: "Opti feeder pressure", lf: "Check Opti feeder set pressure" },
+            { eq: "Powder Booth", it: "Vacuum gauge", lf: "Pressure Gauge Vacuum (2-4 bar)" },
+            { eq: "Powder Booth", it: "Con. Air gauge", lf: "Pressure Gauge Con. Air (2-4 bar)" },
+            { eq: "Powder Booth", it: "Pneumatic leaks", lf: "Check any pneumatic air leakages" },
+            { eq: "Powder Booth", it: "Ultrasonic vibrator", lf: "Check error for ultrasonic vibrator" },
+            { eq: "Powder Booth", it: "Opti Speeder sensor", lf: "Check level sensor operation" },
+            { eq: "Powder Booth", it: "Aspiration motor", lf: "Check noise and vibration" },
+            { eq: "Powder Booth", it: "Reciprocator motor", lf: "Check reciprocator motor & coupling" },
+            { eq: "Powder Booth", it: "Reciprocator encoder", lf: "Check reciprocator encoder condition" },
+            { eq: "Powder Booth", it: "Wiring condition", lf: "Check power and control wire damages" }
+          ]
+        },
+        {
+          id: "vpc-4", qr: "VPC-CURING-OVEN", code: "04", name: "Curing Oven", doc: "LS/MT/102",
+          items: [
+            { eq: "Curing Oven", it: "Burner operation", lf: "Low flame, high flame, pause modes" },
+            { eq: "Curing Oven", it: "Vibrations & noises", lf: "Vibrations and noises" },
+            { eq: "Curing Oven", it: "Inlet gas pressure", lf: "Pressure Gauge 1 reading" },
+            { eq: "Curing Oven", it: "mbar Gas pressure", lf: "Pressure Gauge 2 reading" },
+            { eq: "Curing Oven", it: "Fuel leakages", lf: "LPG or Diesel leakages" },
+            { eq: "Curing Oven", it: "Burner cleanliness", lf: "Cleanness of burner" },
+            { eq: "Curing Oven", it: "Blower fan", lf: "Blower fan operation (sound or vibration)" }
+          ]
+        },
+        {
+          id: "vpc-5", qr: "VPC-DISCENSORE-UNLOAD-CONVEYOR", code: "05", name: "Discensore, Unloading & Conveyor", doc: "LS/MT/102",
+          items: [
+            { eq: "Discensore", it: "Motor vibration", lf: "Check motor vibration and noise" },
+            { eq: "Discensore", it: "Conveyor wobbling", lf: "Check wobbling of conveyor" },
+            { eq: "Unloading table", it: "Motor & gear box", lf: "Check vibration of motor and gear box" },
+            { eq: "Conveyor", it: "Lubricator oil", lf: "Check lubricator oil level" },
+            { eq: "Conveyor", it: "Air pressure", lf: "Check air pressure for lubricator" }
+          ]
+        },
+        {
+          id: "vpc-6", qr: "VPC-DI-PLANT-HOOKS", code: "06", name: "DI Plant & Hooks Cleaning", doc: "LS/MT/102",
+          items: [
+            { eq: "DI Plant", it: "Air pressure", lf: "Check operating air pressure" },
+            { eq: "DI Plant", it: "Water & air leaks", lf: "Check water and air leakages" },
+            { eq: "DI Plant", it: "DI Pumps", lf: "Check pump vibrations and noises" },
+            { eq: "Hooks & Filter press", it: "Sludge leaks", lf: "Check water, chemical and sludge leakages" },
+            { eq: "Hooks & Filter press", it: "Hydraulic unit", lf: "Operation and hydraulic pressure" },
+            { eq: "Hooks & Filter press", it: "Diaphragm pump", lf: "Visual condition / unusual noise or jerk" },
+            { eq: "Hooks & Filter press", it: "Heater supply", lf: "Check power supply for heating element" },
+            { eq: "Hooks & Filter press", it: "IR heater", lf: "IR heater operation and power check" },
+            { eq: "Hooks & Filter press", it: "Washing nozzle", lf: "Hooks washing nozzle cleaning & operation" }
+          ]
+        }
+      ]
+    };
+
+    let currentUser = null;
+    let authRole = 'tech';
+    let currentStation = null;
+    let currentSubmissionRecord = null;
+    let lockoutTimer = null;
+    let html5QrCodeScanner = null;
+    let inspectionStore = JSON.parse(localStorage.getItem('plant_inspections') || '[]');
+
+    // ================= AUTHENTICATION & SESSION PERSISTENCE =================
+    function togglePassVisibility() {
+      const p = document.getElementById('passInput');
+      const icon = document.getElementById('passEyeIcon');
+      if (p.type === 'password') {
+        p.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+      } else {
+        p.type = 'password';
+        icon.className = 'fas fa-eye';
+      }
+    }
+
+    function quickLogin(role) {
+      if (role === 'tech') {
+        setAuthRole('tech');
+        document.getElementById('epfInput').value = 'EPF-' + Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('passInput').value = 'tech123';
+      } else {
+        setAuthRole('admin');
+        document.getElementById('passInput').value = 'admin123';
+      }
+      handleLogin(new Event('submit'));
+    }
+
+    function setAuthRole(role) {
+      authRole = role;
+      const techTab = document.getElementById('roleTabTech');
+      const adminTab = document.getElementById('roleTabAdmin');
+      const epfField = document.getElementById('epfField');
+      const errBox = document.getElementById('loginErrorMsg');
+      if (errBox) errBox.classList.add('hidden');
+
+      if (role === 'tech') {
+        techTab.className = 'py-2.5 text-xs font-bold rounded-lg bg-white shadow-sm text-blue-600 transition';
+        adminTab.className = 'py-2.5 text-xs font-bold rounded-lg text-slate-600 transition';
+        epfField.style.display = 'block';
+      } else {
+        techTab.className = 'py-2.5 text-xs font-bold rounded-lg text-slate-600 transition';
+        adminTab.className = 'py-2.5 text-xs font-bold rounded-lg bg-white shadow-sm text-amber-600 transition';
+        epfField.style.display = 'none';
+      }
+    }
+
+    function handleLogin(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      const rawPass = document.getElementById('passInput').value;
+      const pass = rawPass.trim().toLowerCase();
+      const rawEpf = document.getElementById('epfInput').value;
+      const epf = rawEpf.trim() || 'EPF-4820';
+      const errBox = document.getElementById('loginErrorMsg');
+      if (errBox) errBox.classList.add('hidden');
+
+      // Auto-detect admin credentials regardless of selected tab
+      if (pass === 'admin123' || pass === 'admin' || pass === 'supervisor') {
+        currentUser = { role: 'admin' };
+      } else if (pass === 'tech123' || pass === 'tech' || pass === 'operator') {
+        currentUser = { role: 'tech', epf: epf };
+      } else {
+        if (errBox) {
+          errBox.textContent = 'Invalid credentials. Enter tech123 for Technician or admin123 for Supervisor.';
+          errBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      localStorage.setItem('alumex_active_session', JSON.stringify(currentUser));
+      applyUserSession();
+    }
+
+    function applyUserSession() {
+      if (!currentUser) return;
+      document.getElementById('authScreen').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+
+      if (currentUser.role === 'tech') {
+        document.getElementById('techPortal').classList.remove('hidden');
+        document.getElementById('adminPortal').classList.add('hidden');
+        document.getElementById('roleBadge').textContent = 'Technician: ' + (currentUser.epf || 'EPF');
+        document.getElementById('roleBadge').className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-900/60 border border-blue-500/30 text-blue-300';
+        document.getElementById('techGreeting').textContent = 'Technician (' + (currentUser.epf || '') + ')';
+        const scannerSec = document.getElementById('techScannerSection');
+        if (scannerSec) scannerSec.classList.remove('hidden');
+        const formContainer = document.getElementById('checklistFormContainer');
+        if (formContainer) formContainer.classList.add('hidden');
+      } else {
+        document.getElementById('adminPortal').classList.remove('hidden');
+        document.getElementById('techPortal').classList.add('hidden');
+        document.getElementById('roleBadge').textContent = 'Plant Admin / Supervisor';
+        document.getElementById('roleBadge').className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-900/60 border border-amber-500/30 text-amber-300';
+        renderAdminMatrix();
+      }
+    }
+
+    function logout() {
+      currentUser = null;
+      localStorage.removeItem('alumex_active_session');
+      document.getElementById('authScreen').classList.remove('hidden');
+      document.getElementById('techPortal').classList.add('hidden');
+      document.getElementById('adminPortal').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+      document.getElementById('roleBadge').textContent = 'Not Logged In';
+      document.getElementById('roleBadge').className = 'px-2.5 py-1 text-xs font-semibold rounded-full bg-slate-800 border border-slate-700 text-amber-400';
+      document.getElementById('passInput').value = '';
+      closeQRScannerModal();
+      stopFloorScanner();
+    }
+
+    // ================= PRE-CONFIGURED ZERO-SETUP REAL-TIME DATABASE ENGINE =================
+    const RELAYS = [
+      'https://gun-manhattan.herokuapp.com/gun',
+      'https://relay.peer.ooo/gun',
+      'https://gunjs.herokuapp.com/gun'
+    ];
+
+    let gun = null;
+    let liveDb = null;
+    let syncedRecordIds = new Set();
+
+    function initPreconfiguredDatabase() {
+      try {
+        if (typeof Gun !== 'undefined') {
+          gun = Gun({ peers: RELAYS, localStorage: true });
+          liveDb = gun.get('alumex_prime_ekala_inspections_db_v3');
+
+          updateCloudIndicator('online', 'Live Synced');
+
+          // Real-time listener: triggers whenever ANY technician submits on any phone!
+          liveDb.map().on(function(data, id) {
+            if (!data || typeof data !== 'string') return;
+            try {
+              const submission = JSON.parse(data);
+              if (submission && submission.id && !syncedRecordIds.has(submission.id)) {
+                syncedRecordIds.add(submission.id);
+
+                const existingIdx = inspectionStore.findIndex(s => s.id === submission.id);
+                if (existingIdx >= 0) {
+                  inspectionStore[existingIdx] = submission;
+                } else {
+                  inspectionStore.push(submission);
+                  showLiveSyncNotification(submission);
+                }
+
+                localStorage.setItem('plant_inspections', JSON.stringify(inspectionStore));
+                updateKPISummary();
+                if (currentUser && currentUser.role === 'admin') {
+                  renderAdminMatrix();
+                }
+              }
+            } catch (err) {
+              console.warn("Incoming record parse error:", err);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Database initialization fallback to local:", e);
+        updateCloudIndicator('offline', 'Local Storage Mode');
+      }
+    }
+
+    function broadcastToRealtimeDatabase(submission) {
+      if (liveDb && submission && submission.id) {
+        updateCloudIndicator('syncing', 'Syncing...');
+        liveDb.get(submission.id).put(JSON.stringify(submission), function() {
+          updateCloudIndicator('online', 'Live Synced');
+        });
+      }
+    }
+
+    function showLiveSyncNotification(sub) {
+      const banner = document.createElement('div');
+      banner.className = 'fixed bottom-5 right-5 bg-emerald-600 text-white font-bold px-4 py-3 rounded-2xl shadow-2xl z-50 flex items-center gap-2.5 text-xs animate-bounce border-2 border-white/20';
+      banner.innerHTML = `
+        <i class="fas fa-satellite-dish text-base text-emerald-200"></i>
+        <div>
+          <div>⚡ New Inspection Received!</div>
+          <div class="text-[10px] font-normal text-emerald-100">${sub.stationName || 'Station'} • ${sub.shift || 'Shift'} • ${sub.epf || 'EPF'}</div>
+        </div>
+      `;
+      document.body.appendChild(banner);
+      setTimeout(() => banner.remove(), 4500);
+    }
+
+    function updateCloudIndicator(status, textMsg) {
+      const dot = document.getElementById('cloudStatusDot');
+      const text = document.getElementById('cloudStatusText');
+      if (!dot || !text) return;
+
+      if (status === 'online') {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        text.textContent = textMsg || 'Live Synced';
+      } else if (status === 'syncing') {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-spin';
+        text.textContent = textMsg || 'Syncing...';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        text.textContent = textMsg || 'Offline (Local)';
+      }
+    }
+
+    function openSyncModal() {
+      document.getElementById('syncModal').classList.remove('hidden');
+    }
+
+    function closeSyncModal() {
+      document.getElementById('syncModal').classList.add('hidden');
+    }
+
+    function generateSyncQR() {
+      const modal = document.getElementById('syncQRModal');
+      const canvasContainer = document.getElementById('syncQRCanvas');
+      modal.classList.remove('hidden');
+      canvasContainer.innerHTML = '';
+
+      const payload = JSON.stringify({
+        source: 'ALUMEX_DIRECT_SYNC',
+        data: inspectionStore.slice(-20)
+      });
+
+      new QRCode(canvasContainer, {
+        text: payload,
+        width: 220,
+        height: 220,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.L
+      });
+    }
+
+    function scanSyncQRFromLaptop() {
+      openQRScannerModal();
+    }
+
+    function exportDataBackup() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(inspectionStore, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "alumex_maintenance_backup_" + new Date().toISOString().slice(0,10) + ".json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function importDataBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            const combinedMap = new Map();
+            inspectionStore.forEach(item => combinedMap.set(item.id, item));
+            imported.forEach(item => {
+              combinedMap.set(item.id, item);
+              broadcastToRealtimeDatabase(item);
+            });
+            inspectionStore = Array.from(combinedMap.values());
+            localStorage.setItem('plant_inspections', JSON.stringify(inspectionStore));
+            alert("Imported " + imported.length + " records and synced to real-time network!");
+            updateKPISummary();
+            if (currentUser && currentUser.role === 'admin') renderAdminMatrix();
+            closeSyncModal();
+          }
+        } catch (err) {
+          alert("Invalid backup file: " + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function init() {
+      const today = new Date().toISOString().slice(0, 7);
+      document.getElementById('adminMonthPicker').value = today;
+      renderStationGrid();
+      populateTestQRButtons();
+      populateFloorSimButtons();
+      updateKPISummary();
+      initSignaturePad();
+
+      // Initialize pre-configured zero-setup Realtime Database
+      initPreconfiguredDatabase();
+
+      // Auto-restore login session if saved
+      const savedSession = localStorage.getItem('alumex_active_session');
+      if (savedSession) {
+        try {
+          currentUser = JSON.parse(savedSession);
+          applyUserSession();
+        } catch(e) {}
+      }
+    }
+
+    function renderStationGrid() {
+      const grid = document.getElementById('stationGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      
+      const allStations = [
+        ...MASTER_DATA.extrusion.map(s => ({ ...s, plant: 'Extrusion Plant' })),
+        ...MASTER_DATA.vpc.map(s => ({ ...s, plant: 'VPC Plant' }))
+      ];
+
+      allStations.forEach(st => {
+        const card = document.createElement('div');
+        card.className = 'border border-slate-200 hover:border-blue-500 rounded-xl p-3 cursor-pointer transition bg-slate-50 hover:bg-blue-50/50 flex justify-between items-center';
+        card.onclick = () => loadStationForm(st.id);
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">${st.code}</span>
+              <span class="text-xs font-bold text-slate-800">${st.name}</span>
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5">${st.plant} • ${st.items.length} checks</div>
+          </div>
+          <i class="fas fa-chevron-right text-slate-400 text-xs"></i>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // ================= 30-MINUTE LOCKOUT & FORM LOADING =================
+    function onShiftChange() {
+      if (currentStation) {
+        loadStationForm(currentStation.id);
+      }
+    }
+
+    function loadStationForm(stationId) {
+      if (lockoutTimer) clearInterval(lockoutTimer);
+
+      const all = [...MASTER_DATA.extrusion, ...MASTER_DATA.vpc];
+      currentStation = all.find(s => s.id === stationId);
+      if (!currentStation) return;
+
+      const isExt = MASTER_DATA.extrusion.some(s => s.id === stationId);
+      document.getElementById('formPlantBadge').textContent = isExt ? 'Extrusion Plant (CH/MT/102)' : 'Vertical Powder Coating (LS/MT/102)';
+      document.getElementById('formStationTitle').textContent = currentStation.code + '. ' + currentStation.name;
+      document.getElementById('formDocNo').textContent = 'Document Ref: ' + currentStation.doc + ' • Machine Panel Tag: ' + currentStation.qr;
+      document.getElementById('formDate').textContent = new Date().toLocaleDateString('en-GB');
+      document.getElementById('formEPF').textContent = currentUser?.epf || 'EPF-4820';
+      document.getElementById('formTotalCount').textContent = currentStation.items.length + ' Checkpoints';
+
+      const selectedShift = document.getElementById('formShift').value;
+      const todayDate = new Date().toISOString().slice(0, 10);
+
+      // Search for any existing submission for this station + date + shift
+      const existingSubmission = inspectionStore.find(s => 
+        s.stationId === currentStation.id && 
+        s.date === todayDate && 
+        s.shift === selectedShift
+      );
+
+      currentSubmissionRecord = existingSubmission || null;
+
+      // Check 30-minute expiration rule
+      let isLocked = false;
+      let remainingMs = 0;
+      const LOCKOUT_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
+      if (existingSubmission && existingSubmission.submittedAt) {
+        const elapsedMs = Date.now() - existingSubmission.submittedAt;
+        if (elapsedMs > LOCKOUT_DURATION_MS) {
+          isLocked = true;
+        } else {
+          remainingMs = LOCKOUT_DURATION_MS - elapsedMs;
+        }
+      }
+
+      // If logged in as supervisor/admin, they can always view or override
+      const isAdmin = currentUser && currentUser.role === 'admin';
+
+      const banner = document.getElementById('lockoutBanner');
+      const lockBadge = document.getElementById('formLockBadge');
+      const submitBtn = document.getElementById('submitBtn');
+      const submitBtnText = document.getElementById('submitBtnText');
+
+      if (isLocked) {
+        // Locked state
+        lockBadge.classList.remove('hidden');
+        lockBadge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 flex items-center gap-1';
+        lockBadge.innerHTML = '<i class="fas fa-lock"></i> Locked';
+
+        banner.classList.remove('hidden');
+        banner.className = 'p-4 rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 text-xs flex items-start gap-3';
+        const submittedTimeStr = new Date(existingSubmission.submittedAt).toLocaleTimeString();
+        banner.innerHTML = `
+          <i class="fas fa-lock text-rose-600 text-lg mt-0.5"></i>
+          <div>
+            <b>🔒 Checklist Locked (30-Minute Window Expired):</b>
+            <p class="mt-0.5 text-rose-700">This station inspection was marked and submitted at <b>${submittedTimeStr}</b> by <b>${existingSubmission.epf}</b>. As per plant policy, checklist details cannot be altered after 30 minutes have elapsed.</p>
+            ${isAdmin ? '<span class="inline-block mt-2 font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Supervisor Inspection Mode Active</span>' : ''}
+          </div>
+        `;
+
+        if (!isAdmin) {
+          submitBtn.classList.add('hidden');
+        } else {
+          submitBtn.classList.remove('hidden');
+          submitBtnText.textContent = "Supervisor Override Update";
+        }
+      } else if (existingSubmission) {
+        // Within 30 minutes grace period
+        lockBadge.classList.remove('hidden');
+        lockBadge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 flex items-center gap-1';
+        lockBadge.innerHTML = '<i class="fas fa-hourglass-half"></i> Editable';
+
+        banner.classList.remove('hidden');
+        banner.className = 'p-4 rounded-2xl border border-amber-200 bg-amber-50 text-amber-900 text-xs flex items-start gap-3';
+        const submittedTimeStr = new Date(existingSubmission.submittedAt).toLocaleTimeString();
+        
+        function updateGraceTimer() {
+          const rem = Math.max(0, (existingSubmission.submittedAt + LOCKOUT_DURATION_MS) - Date.now());
+          const mins = Math.floor(rem / 60000);
+          const secs = Math.floor((rem % 60000) / 1000);
+          banner.innerHTML = `
+            <i class="fas fa-clock text-amber-600 text-lg mt-0.5"></i>
+            <div>
+              <b>⚠️ 30-Minute Modification Grace Window Active:</b>
+              <p class="mt-0.5 text-amber-800">Submitted at <b>${submittedTimeStr}</b> by <b>${existingSubmission.epf}</b>. You have <b class="font-mono text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-300">${mins}m ${secs < 10 ? '0' : ''}${secs}s remaining</b> to edit values before this checklist permanently locks.</p>
+            </div>
+          `;
+          if (rem <= 0) {
+            clearInterval(lockoutTimer);
+            loadStationForm(stationId); // Re-render in locked state!
+          }
+        }
+        updateGraceTimer();
+        lockoutTimer = setInterval(updateGraceTimer, 1000);
+
+        submitBtn.classList.remove('hidden');
+        submitBtnText.textContent = "Update Inspection (Within 30m Window)";
+      } else {
+        // Fresh inspection
+        lockBadge.classList.add('hidden');
+        banner.classList.add('hidden');
+        submitBtn.classList.remove('hidden');
+        submitBtnText.textContent = "Submit Station Inspection";
+      }
+
+      // Populate checklist rows
+      const container = document.getElementById('checklistRows');
+      container.innerHTML = '';
+
+      currentStation.items.forEach((item, idx) => {
+        let savedVal = '√';
+        let savedReading = '';
+
+        if (existingSubmission && existingSubmission.records && existingSubmission.records[idx]) {
+          savedVal = existingSubmission.records[idx].status || '√';
+          savedReading = existingSubmission.records[idx].reading || '';
+        }
+
+        const disabledAttr = (isLocked && !isAdmin) ? 'disabled' : '';
+        const lockedClass = (isLocked && !isAdmin) ? 'locked-field' : '';
+
+        const row = document.createElement('div');
+        row.className = `p-3 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2.5 ${lockedClass}`;
+        row.innerHTML = `
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+            <div class="flex-1">
+              <span class="text-xs font-bold text-slate-900">${idx+1}. ${item.eq} - ${item.it}</span>
+              <p class="text-[11px] text-slate-600 mt-0.5"><i class="fas fa-search text-slate-400 mr-1"></i>Standard: ${item.lf}</p>
+            </div>
+            <div class="inline-flex rounded-lg border border-slate-300 p-0.5 bg-white shadow-sm self-start">
+              <label class="cursor-pointer px-2.5 py-1 text-xs font-bold rounded flex items-center gap-1 has-[:checked]:bg-emerald-600 has-[:checked]:text-white transition">
+                <input type="radio" name="status_${idx}" value="√" class="hidden" ${savedVal === '√' ? 'checked' : ''} ${disabledAttr}> √ OK
+              </label>
+              <label class="cursor-pointer px-2.5 py-1 text-xs font-bold rounded flex items-center gap-1 has-[:checked]:bg-rose-600 has-[:checked]:text-white transition">
+                <input type="radio" name="status_${idx}" value="X" class="hidden" ${savedVal === 'X' ? 'checked' : ''} ${disabledAttr}> X Defect
+              </label>
+              <label class="cursor-pointer px-2.5 py-1 text-xs font-bold rounded flex items-center gap-1 has-[:checked]:bg-slate-600 has-[:checked]:text-white transition">
+                <input type="radio" name="status_${idx}" value="0" class="hidden" ${savedVal === '0' ? 'checked' : ''} ${disabledAttr}> 0 Standby
+              </label>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-semibold text-slate-500 whitespace-nowrap"><i class="fas fa-tachometer-alt mr-1 text-blue-500"></i>Reading / Value:</span>
+            <input type="text" id="val_${idx}" value="${savedReading}" placeholder="e.g. pressure (bar), temp (°C), motor vibration or remarks" class="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" ${disabledAttr}>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+
+      // Populate notes and signature if exists
+      document.getElementById('technicianRemarks').value = existingSubmission?.remarks || '';
+      if (isLocked && !isAdmin) {
+        document.getElementById('technicianRemarks').setAttribute('disabled', 'true');
+        document.getElementById('clearSigBtn').classList.add('hidden');
+      } else {
+        document.getElementById('technicianRemarks').removeAttribute('disabled');
+        document.getElementById('clearSigBtn').classList.remove('hidden');
+      }
+
+      // Hide scanner section and show checklist form smoothly for technician
+      const scannerSec = document.getElementById('techScannerSection');
+      if (scannerSec && currentUser?.role === 'tech') {
+        scannerSec.classList.add('hidden');
+      }
+      document.getElementById('checklistFormContainer').classList.remove('hidden');
+      document.getElementById('checklistFormContainer').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function closeChecklistForm() {
+      if (lockoutTimer) clearInterval(lockoutTimer);
+      document.getElementById('checklistFormContainer').classList.add('hidden');
+      const scannerSec = document.getElementById('techScannerSection');
+      if (scannerSec && currentUser?.role === 'tech') {
+        scannerSec.classList.remove('hidden');
+      }
+      currentStation = null;
+      currentSubmissionRecord = null;
+    }
+
+    function closeChecklistFormAndScan() {
+      closeChecklistForm();
+      startFloorScanner();
+    }
+
+    // ================= FLOOR MACHINE PANEL QR SCANNER LOGIC =================
+    let floorQrScanner = null;
+
+    function startFloorScanner() {
+      const alertBox = document.getElementById('floorScannerAlert');
+      if (alertBox) alertBox.classList.add('hidden');
+      const placeholder = document.getElementById('floorScannerPlaceholder');
+      if (placeholder) placeholder.classList.add('hidden');
+
+      if (!floorQrScanner) {
+        floorQrScanner = new Html5Qrcode("floor-qr-reader");
+      }
+
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+      floorQrScanner.start({ facingMode: "environment" }, config, onFloorScanSuccess, onFloorScanError)
+        .then(() => {
+          document.getElementById('startFloorCamBtn')?.classList.add('hidden');
+          document.getElementById('stopFloorCamBtn')?.classList.remove('hidden');
+        })
+        .catch(err => {
+          console.warn("Floor camera start error:", err);
+          if (placeholder) placeholder.classList.remove('hidden');
+          if (alertBox) {
+            alertBox.classList.remove('hidden');
+            alertBox.innerHTML = `<b>Camera Access Note:</b> Please allow camera permissions in your browser, or select a photo of the panel QR code below.`;
+          }
+        });
+    }
+
+    function stopFloorScanner() {
+      if (floorQrScanner) {
+        floorQrScanner.stop().catch(() => {}).then(() => {
+          floorQrScanner.clear();
+          floorQrScanner = null;
+          document.getElementById('startFloorCamBtn')?.classList.remove('hidden');
+          document.getElementById('stopFloorCamBtn')?.classList.add('hidden');
+          const placeholder = document.getElementById('floorScannerPlaceholder');
+          if (placeholder) placeholder.classList.remove('hidden');
+        });
+      }
+    }
+
+    function onFloorScanSuccess(decodedText) {
+      handleScannedTag(decodedText.trim());
+    }
+
+    function onFloorScanError() {}
+
+    function handleFloorQRFileScan(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const scanner = new Html5Qrcode("floor-qr-reader");
+      scanner.scanFile(file, true)
+        .then(decodedText => {
+          handleScannedTag(decodedText.trim());
+        })
+        .catch(() => {
+          alert("Could not detect a QR code in the photo. Please ensure the QR tag is clearly visible.");
+        });
+    }
+
+    function toggleFloorSimulator() {
+      const box = document.getElementById('floorSimulatorContainer');
+      if (box) box.classList.toggle('hidden');
+    }
+
+    function populateFloorSimButtons() {
+      const container = document.getElementById('floorSimButtons');
+      if (!container) return;
+      container.innerHTML = '';
+      const allStations = [
+        ...MASTER_DATA.extrusion.map(s => ({ ...s, plant: 'EXT' })),
+        ...MASTER_DATA.vpc.map(s => ({ ...s, plant: 'VPC' }))
+      ];
+
+      allStations.forEach(st => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-left p-2 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 text-[10px] font-bold text-slate-700 truncate transition';
+        btn.innerHTML = `<span class="text-blue-600 font-extrabold">[${st.plant}]</span> ${st.code}. ${st.name}`;
+        btn.onclick = () => handleScannedTag(st.qr);
+        container.appendChild(btn);
+      });
+    }
+
+    // ================= MODAL QR SCANNER LOGIC (SUPERVISOR / P2P) =================
+    function openQRScannerModal() {
+      const modal = document.getElementById('qrScannerModal');
+      modal.classList.remove('hidden');
+      document.getElementById('scannerAlert').classList.add('hidden');
+
+      if (!html5QrCodeScanner) {
+        html5QrCodeScanner = new Html5Qrcode("qr-reader");
+      }
+
+      const qrConfig = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+      html5QrCodeScanner.start({ facingMode: "environment" }, qrConfig, onQRScanSuccess, onQRScanError)
+        .catch(() => {
+          const alertBox = document.getElementById('scannerAlert');
+          alertBox.classList.remove('hidden');
+          alertBox.innerHTML = `<b>Camera Access Note:</b> Please allow camera permission or select photo below.`;
+        });
+    }
+
+    function closeQRScannerModal() {
+      const modal = document.getElementById('qrScannerModal');
+      modal.classList.add('hidden');
+      if (html5QrCodeScanner) {
+        html5QrCodeScanner.stop().catch(() => {}).then(() => {
+          html5QrCodeScanner.clear();
+          html5QrCodeScanner = null;
+        });
+      }
+    }
+
+    function onQRScanSuccess(decodedText) {
+      handleScannedTag(decodedText.trim());
+    }
+
+    function onQRScanError() {}
+
+    function handleQRFileScan(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const scanner = new Html5Qrcode("qr-reader");
+      scanner.scanFile(file, true)
+        .then(decodedText => {
+          handleScannedTag(decodedText.trim());
+        })
+        .catch(() => {
+          alert("Could not detect a QR code in the photo. Please try again or select the station manually.");
+        });
+    }
+
+    function handleScannedTag(tag) {
+      // Peer-to-peer data beam scan
+      if (tag.startsWith('{') && tag.includes('ALUMEX_DIRECT_SYNC')) {
+        try {
+          const parsed = JSON.parse(tag);
+          if (parsed && Array.isArray(parsed.data)) {
+            const combinedMap = new Map();
+            inspectionStore.forEach(item => combinedMap.set(item.id, item));
+            parsed.data.forEach(item => {
+              combinedMap.set(item.id, item);
+              broadcastToRealtimeDatabase(item);
+            });
+            inspectionStore = Array.from(combinedMap.values());
+            localStorage.setItem('plant_inspections', JSON.stringify(inspectionStore));
+            closeQRScannerModal();
+            stopFloorScanner();
+            alert("Success! Imported " + parsed.data.length + " inspection records from phone!");
+            updateKPISummary();
+            if (currentUser && currentUser.role === 'admin') renderAdminMatrix();
+            return;
+          }
+        } catch (e) {
+          console.error("QR Sync parse error:", e);
+        }
+      }
+
+      const allStations = [...MASTER_DATA.extrusion, ...MASTER_DATA.vpc];
+      const found = allStations.find(s => s.qr.toLowerCase() === tag.toLowerCase() || s.id.toLowerCase() === tag.toLowerCase() || tag.includes(s.qr));
+      
+      if (found) {
+        closeQRScannerModal();
+        stopFloorScanner();
+        loadStationForm(found.id);
+      } else {
+        const alertBox = document.getElementById('floorScannerAlert') || document.getElementById('scannerAlert');
+        if (alertBox) {
+          alertBox.classList.remove('hidden');
+          alertBox.innerHTML = `Scanned tag: <b>"${tag}"</b> is not a recognized machine tag.`;
+        }
+      }
+    }
+
+    function populateTestQRButtons() {
+      const container = document.getElementById('testButtonsContainer');
+      container.innerHTML = '';
+      const allStations = [
+        ...MASTER_DATA.extrusion.map(s => ({ ...s, plant: 'EXT' })),
+        ...MASTER_DATA.vpc.map(s => ({ ...s, plant: 'VPC' }))
+      ];
+
+      allStations.forEach(st => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-left p-1.5 rounded bg-white hover:bg-blue-50 border border-slate-200 text-[10px] font-bold text-slate-700 truncate';
+        btn.innerHTML = `<span class="text-blue-600">[${st.plant}]</span> ${st.code}. ${st.name}`;
+        btn.onclick = () => handleScannedTag(st.qr);
+        container.appendChild(btn);
+      });
+    }
+
+    function openQRPrintModal() {
+      const modal = document.getElementById('qrPrintModal');
+      modal.classList.remove('hidden');
+      const container = document.getElementById('qrCodeCardsContainer');
+      container.innerHTML = '';
+
+      const allStations = [
+        ...MASTER_DATA.extrusion.map(s => ({ ...s, plant: 'Extrusion Plant (CH/MT/102)' })),
+        ...MASTER_DATA.vpc.map(s => ({ ...s, plant: 'VPC Plant (LS/MT/102)' }))
+      ];
+
+      allStations.forEach(st => {
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-2xl border-2 border-slate-800 bg-white flex items-center justify-between gap-4 shadow-sm page-break-inside-avoid';
+        const qrId = 'qrcode_' + st.id;
+        card.innerHTML = `
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-blue-700">${st.plant}</span>
+            <h4 class="text-sm font-black text-slate-900 mt-0.5">${st.code}. ${st.name}</h4>
+            <div class="text-[11px] font-mono text-slate-500 mt-1">TAG: <b>${st.qr}</b></div>
+            <div class="text-[10px] text-slate-400 mt-0.5">${st.items.length} Checkpoints</div>
+          </div>
+          <div id="${qrId}" class="p-1 bg-white border border-slate-300 rounded-lg flex-shrink-0"></div>
+        `;
+        container.appendChild(card);
+
+        new QRCode(document.getElementById(qrId), {
+          text: st.qr,
+          width: 80,
+          height: 80,
+          colorDark: "#0f172a",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      });
+    }
+
+    function closeQRPrintModal() {
+      document.getElementById('qrPrintModal').classList.add('hidden');
+    }
+
+    // ================= SIGNATURE PAD =================
+    let sigCanvas, sigCtx, isDrawing = false;
+    function initSignaturePad() {
+      sigCanvas = document.getElementById('techSigPad');
+      if (!sigCanvas) return;
+      sigCtx = sigCanvas.getContext('2d');
+      sigCtx.strokeStyle = '#0f172a';
+      sigCtx.lineWidth = 2;
+      sigCtx.lineCap = 'round';
+
+      function getPos(e) {
+        const rect = sigCanvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+          x: (clientX - rect.left) * (sigCanvas.width / rect.width),
+          y: (clientY - rect.top) * (sigCanvas.height / rect.height)
+        };
+      }
+
+      function start(e) {
+        isDrawing = true;
+        const pos = getPos(e);
+        sigCtx.beginPath();
+        sigCtx.moveTo(pos.x, pos.y);
+        e.preventDefault();
+      }
+
+      function draw(e) {
+        if (!isDrawing) return;
+        const pos = getPos(e);
+        sigCtx.lineTo(pos.x, pos.y);
+        sigCtx.stroke();
+        e.preventDefault();
+      }
+
+      function stop() { isDrawing = false; }
+
+      sigCanvas.addEventListener('mousedown', start);
+      sigCanvas.addEventListener('mousemove', draw);
+      window.addEventListener('mouseup', stop);
+
+      sigCanvas.addEventListener('touchstart', start, { passive: false });
+      sigCanvas.addEventListener('touchmove', draw, { passive: false });
+      window.addEventListener('touchend', stop);
+    }
+
+    function clearTechSignature() {
+      if (sigCtx && sigCanvas) {
+        sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+      }
+    }
+
+    // ================= SUBMIT CHECKLIST WITH 30-MIN LOCKOUT =================
+    function submitChecklistForm() {
+      if (!currentStation) return;
+
+      const LOCKOUT_DURATION_MS = 30 * 60 * 1000;
+      const isAdmin = currentUser && currentUser.role === 'admin';
+
+      // Check if locked out
+      if (currentSubmissionRecord && currentSubmissionRecord.submittedAt && !isAdmin) {
+        const elapsed = Date.now() - currentSubmissionRecord.submittedAt;
+        if (elapsed > LOCKOUT_DURATION_MS) {
+          alert('Action Rejected: 30 minutes have passed since this checklist was submitted. Values are now permanently locked.');
+          return;
+        }
+      }
+      
+      const records = currentStation.items.map((it, idx) => {
+        const radios = document.getElementsByName('status_' + idx);
+        let val = '√';
+        for (let r of radios) { if (r.checked) val = r.value; }
+        return {
+          item: it.it,
+          equipment: it.eq,
+          look_for: it.lf,
+          status: val,
+          reading: document.getElementById('val_' + idx).value
+        };
+      });
+
+      const today = new Date();
+      const selectedShift = document.getElementById('formShift').value;
+      const todayDate = today.toISOString().slice(0, 10);
+
+      // Preserve original submission timestamp if editing within grace window, or assign current timestamp
+      const originalTime = currentSubmissionRecord?.submittedAt || Date.now();
+      const submissionId = currentSubmissionRecord?.id || ('INS-' + currentStation.id + '-' + todayDate + '-' + selectedShift.replace(' ', ''));
+
+      const submission = {
+        id: submissionId,
+        stationId: currentStation.id,
+        stationName: currentStation.name,
+        plant: MASTER_DATA.extrusion.some(s => s.id === currentStation.id) ? 'EXTRUSION' : 'VPC',
+        date: todayDate,
+        day: today.getDate(),
+        month: today.toISOString().slice(0, 7),
+        shift: selectedShift,
+        epf: currentUser?.epf || currentSubmissionRecord?.epf || 'EPF-TECH',
+        remarks: document.getElementById('technicianRemarks').value,
+        submittedAt: originalTime,
+        lastModifiedAt: Date.now(),
+        records: records
+      };
+
+      // Add or update in inspectionStore
+      const existingIdx = inspectionStore.findIndex(s => s.id === submission.id);
+      if (existingIdx >= 0) {
+        inspectionStore[existingIdx] = submission;
+      } else {
+        inspectionStore.push(submission);
+      }
+
+      localStorage.setItem('plant_inspections', JSON.stringify(inspectionStore));
+
+      // Broadcast immediately to the real-time database mesh
+      broadcastToRealtimeDatabase(submission);
+
+      alert('Inspection marked and submitted successfully for ' + currentStation.name + '! Note: Values can only be changed within the next 30 minutes.');
+      closeChecklistForm();
+      updateKPISummary();
+    }
+
+    function updateKPISummary() {
+      const plantFilter = document.getElementById('adminPlantFilter')?.value || 'ALL';
+      let totalMaster = 0;
+      if (plantFilter === 'ALL') totalMaster = 84 + 62;
+      else if (plantFilter === 'EXTRUSION') totalMaster = 84;
+      else totalMaster = 62;
+
+      const el = document.getElementById('kpiTotalCheckpoints');
+      if (el) el.textContent = totalMaster;
+
+      let defects = 0;
+      inspectionStore.forEach(sub => {
+        sub.records.forEach(r => { if (r.status === 'X') defects++; });
+      });
+      const defEl = document.getElementById('kpiDefects');
+      if (defEl) defEl.textContent = defects;
+    }
+
+    // ================= MONTHLY AUDIT MATRIX & DETAIL VIEW =================
+    function renderAdminMatrix() {
+      updateKPISummary();
+      const selectedMonth = document.getElementById('adminMonthPicker').value;
+      const plantFilter = document.getElementById('adminPlantFilter').value;
+
+      let stations = [];
+      if (plantFilter === 'ALL' || plantFilter === 'EXTRUSION') stations.push(...MASTER_DATA.extrusion);
+      if (plantFilter === 'ALL' || plantFilter === 'VPC') stations.push(...MASTER_DATA.vpc);
+
+      let theadHTML = `<tr>
+        <th class="p-2 border sticky left-0 bg-slate-100 z-30 min-w-[140px]">Equipment</th>
+        <th class="p-2 border sticky left-[140px] bg-slate-100 z-30 min-w-[160px]">Item</th>
+        <th class="p-2 border min-w-[220px]">Look For Criteria</th>`;
+      for (let d = 1; d <= 31; d++) {
+        theadHTML += `<th class="p-1 border text-center min-w-[28px]">${d}</th>`;
+      }
+      theadHTML += `</tr>`;
+      document.getElementById('matrixThead').innerHTML = theadHTML;
+
+      const monthSubmissions = inspectionStore.filter(s => s.month === selectedMonth);
+
+      let tbodyHTML = '';
+      stations.forEach(st => {
+        st.items.forEach(it => {
+          tbodyHTML += `<tr class="hover:bg-slate-50">
+            <td class="p-2 border font-bold text-slate-800 sticky left-0 bg-white z-10">${it.eq}</td>
+            <td class="p-2 border font-medium text-slate-700 sticky left-[140px] bg-white z-10">${it.it}</td>
+            <td class="p-2 border text-slate-500">${it.lf}</td>`;
+          
+          for (let d = 1; d <= 31; d++) {
+            let cellVal = '-';
+            let cellClass = 'text-slate-300';
+            let clickAttr = '';
+
+            const sub = monthSubmissions.find(s => s.stationId === st.id && s.day === d);
+            if (sub) {
+              const rec = sub.records.find(r => r.item === it.it && r.equipment === it.eq);
+              if (rec) {
+                cellVal = rec.status;
+                if (rec.status === '√') cellClass = 'bg-emerald-100 text-emerald-800 font-bold hover:ring-2 hover:ring-emerald-400 cursor-pointer';
+                else if (rec.status === 'X') cellClass = 'bg-rose-100 text-rose-800 font-black animate-pulse hover:ring-2 hover:ring-rose-400 cursor-pointer';
+                else if (rec.status === '0') cellClass = 'bg-slate-200 text-slate-700 font-bold hover:ring-2 hover:ring-slate-400 cursor-pointer';
+                
+                clickAttr = `onclick="openCellDetailModal('${sub.id}', '${it.eq}', '${it.it}')"`;
+              }
+            }
+
+            tbodyHTML += `<td class="p-1 border text-center ${cellClass}" ${clickAttr}>${cellVal}</td>`;
+          }
+          tbodyHTML += `</tr>`;
+        });
+      });
+
+      document.getElementById('matrixTbody').innerHTML = tbodyHTML;
+    }
+
+    function openCellDetailModal(submissionId, eqName, itName) {
+      const sub = inspectionStore.find(s => s.id === submissionId);
+      if (!sub) return;
+
+      const rec = sub.records.find(r => r.equipment === eqName && r.item === itName);
+      const modal = document.getElementById('cellDetailModal');
+      const content = document.getElementById('detailModalContent');
+      modal.classList.remove('hidden');
+
+      const isLocked = (Date.now() - sub.submittedAt) > (30 * 60 * 1000);
+      const timeStr = new Date(sub.submittedAt).toLocaleTimeString();
+      const dateStr = sub.date;
+
+      content.innerHTML = `
+        <div class="p-3 bg-slate-50 rounded-2xl border space-y-1.5">
+          <div class="text-[10px] font-bold uppercase text-slate-400">${sub.plant} • ${sub.stationName}</div>
+          <div class="text-sm font-black text-slate-900">${eqName} - ${itName}</div>
+          <div class="text-slate-600"><i class="fas fa-search text-slate-400 mr-1"></i>${rec?.look_for || ''}</div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div class="p-3 border rounded-xl">
+            <span class="text-slate-400 block font-semibold text-[10px]">INSPECTION RATING</span>
+            <span class="text-lg font-black ${rec?.status === '√' ? 'text-emerald-600' : (rec?.status === 'X' ? 'text-rose-600' : 'text-slate-600')}">${rec?.status === '√' ? '√ Condition OK' : (rec?.status === 'X' ? 'X Condition NOT OK' : '0 Standby')}</span>
+          </div>
+          <div class="p-3 border rounded-xl">
+            <span class="text-slate-400 block font-semibold text-[10px]">RECORD LOCK STATUS</span>
+            <span class="font-bold flex items-center gap-1 mt-1 ${isLocked ? 'text-rose-600' : 'text-emerald-600'}">
+              <i class="fas ${isLocked ? 'fa-lock' : 'fa-hourglass-half'}"></i> ${isLocked ? 'Permanently Locked (>30m)' : 'Within 30m Grace Window'}
+            </span>
+          </div>
+        </div>
+
+        <div class="p-3 border rounded-xl space-y-1">
+          <div class="flex justify-between">
+            <span class="text-slate-500">Inspector EPF:</span>
+            <b>${sub.epf}</b>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Marked Date & Time:</span>
+            <b>${dateStr} at ${timeStr}</b>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Plant Shift:</span>
+            <b>${sub.shift}</b>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Gauge Reading / Value:</span>
+            <b class="text-blue-600">${rec?.reading ? rec.reading : 'N/A (Standard Check)'}</b>
+          </div>
+        </div>
+
+        ${sub.remarks ? `
+          <div class="p-3 border border-amber-200 bg-amber-50 rounded-xl">
+            <span class="text-amber-800 font-bold block text-[10px] uppercase">Technician Notes:</span>
+            <p class="text-slate-800 mt-0.5">${sub.remarks}</p>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    function closeCellDetailModal() {
+      document.getElementById('cellDetailModal').classList.add('hidden');
+    }
+
+    function downloadMonthlyExcel() {
+      const selectedMonth = document.getElementById('adminMonthPicker').value;
+      const plantFilter = document.getElementById('adminPlantFilter').value;
+
+      let stations = [];
+      if (plantFilter === 'ALL' || plantFilter === 'EXTRUSION') stations.push(...MASTER_DATA.extrusion);
+      if (plantFilter === 'ALL' || plantFilter === 'VPC') stations.push(...MASTER_DATA.vpc);
+
+      const monthSubmissions = inspectionStore.filter(s => s.month === selectedMonth);
+
+      const headerRow = ['Plant', 'Station', 'Equipment', 'Item', 'Standard Look For Criteria'];
+      for (let d = 1; d <= 31; d++) headerRow.push('Day ' + d);
+
+      const exportRows = [headerRow];
+
+      stations.forEach(st => {
+        st.items.forEach(it => {
+          const rowData = [
+            MASTER_DATA.extrusion.some(s => s.id === st.id) ? 'Extrusion (CH/MT/102)' : 'VPC (LS/MT/102)',
+            st.name,
+            it.eq,
+            it.it,
+            it.lf
+          ];
+
+          for (let d = 1; d <= 31; d++) {
+            let val = '-';
+            const sub = monthSubmissions.find(s => s.stationId === st.id && s.day === d);
+            if (sub) {
+              const rec = sub.records.find(r => r.item === it.it && r.equipment === it.eq);
+              if (rec) val = rec.status;
+            }
+            rowData.push(val);
+          }
+          exportRows.push(rowData);
+        });
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Monthly Checklists");
+      XLSX.writeFile(wb, "Alumex_Maintenance_Report_" + selectedMonth + ".xlsx");
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
