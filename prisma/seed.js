@@ -222,17 +222,30 @@ const MASTER_DATA = {
 async function main() {
   console.log("Seeding Database...");
 
-  // Seed default users
-  await prisma.user.upsert({
-    where: { epf: "EPF-4820" },
-    update: {},
-    create: {
-      epf: "EPF-4820",
-      password: "tech123",
-      role: "TECHNICIAN",
-      name: "Floor Technician"
-    }
-  });
+  // Seed default technicians (Restricted Whitelist)
+  const technicianEpfs = [
+    "EPF-3520",
+    "EPF-3526",
+    "EPF-2545",
+    "EPF-2253",
+    "EPF-2712",
+    "EPF-3457",
+    "EPF-3174",
+    "EPF-4040"
+  ];
+
+  for (const epfNo of technicianEpfs) {
+    await prisma.user.upsert({
+      where: { epf: epfNo },
+      update: {},
+      create: {
+        epf: epfNo,
+        password: "tech123",
+        role: "TECHNICIAN",
+        name: `Technician (${epfNo})`
+      }
+    });
+  }
 
   await prisma.user.upsert({
     where: { epf: "admin" },

@@ -29,8 +29,22 @@ import {
   QrCode,
   User,
   KeyRound,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft,
+  Calendar,
+  CalendarDays
 } from 'lucide-react';
+
+const ALLOWED_TECHNICIAN_EPFS = [
+  'EPF-3520',
+  'EPF-3526',
+  'EPF-2545',
+  'EPF-2253',
+  'EPF-2712',
+  'EPF-3457',
+  'EPF-3174',
+  'EPF-4040'
+];
 
 interface CurrentUser {
   role: 'tech' | 'admin';
@@ -41,18 +55,29 @@ interface CurrentUser {
 export default function PlantMaintenancePortal() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authRole, setAuthRole] = useState<'tech' | 'admin'>('tech');
-  const [epfInput, setEpfInput] = useState('EPF-4820');
-  const [passInput, setPassInput] = useState('tech123');
+  // Default fields empty - no prefill!
+  const [epfInput, setEpfInput] = useState('');
+  const [passInput, setPassInput] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Profile & Password Change State
+  // Profile & Password Change State (Technician)
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+
+  // Admin Password Change State
+  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
+  const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
+  const [adminNewPassword, setAdminNewPassword] = useState('');
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState('');
+  const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
+
+  // Month Picker Popover State
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
 
   // Floor Scanner & Checklist states
   const [techActiveTab, setTechActiveTab] = useState<'scanner' | 'checklist' | 'history'>('scanner');
@@ -172,25 +197,50 @@ export default function PlantMaintenancePortal() {
   async function syncOfflineInspections() {
     if (!offlineDb || !navigator.onLine) return;
     try {
-      const pending = await offlineDb.inspections.where('isSynced').equals(0).toArray();
+      const allLocal = await offlineDb.inspections.toArray();
+      const pending = allLocal.filter((item) => !item.isSynced);
+
+      if (pending.length === 0) {
+        setPendingSyncCount(0);
+        return;
+      }
+
       let syncedCount = 0;
       for (const item of pending) {
+        const payload = {
+          id: item.id,
+          stationId: item.stationId,
+          epf: item.epf,
+          inspectionDate: item.date,
+          day: item.day,
+          month: item.month,
+          records: item.records.map((r: any) => ({
+            equipment: r.equipment,
+            item: r.item,
+            status: r.status,
+            defectNote: r.defectNote || '',
+          })),
+        };
+
         const res = await fetch('/api/inspections', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item)
+          body: JSON.stringify(payload),
         });
+
         if (res.ok) {
           await offlineDb.inspections.update(item.id, { isSynced: true });
           syncedCount++;
         }
       }
+
       if (syncedCount > 0) {
         toast.success(`Synced ${syncedCount} offline record(s) to cloud database!`);
       }
-      loadStoredInspections();
+      await loadStoredInspections();
     } catch (e) {
       console.warn('Sync failed:', e);
+      toast.error('Sync failed. Please check internet connection.');
     }
   }
 
@@ -295,6 +345,83 @@ export default function PlantMaintenancePortal() {
     } finally {
       setPasswordChangeLoading(false);
     }
+  }
+
+  // 6b. Supervisor / Admin Password Change Handler
+  async function handleAdminPasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    if (adminNewPassword !== adminConfirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (adminNewPassword.length < 4) {
+      toast.error('New password must be at least 4 characters long');
+      return;
+    }
+
+    setAdminPasswordLoading(true);
+    try {
+      const res = await fetch('/api/profile/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          epf: 'admin',
+          currentPassword: adminCurrentPassword,
+          newPassword: adminNewPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || 'Supervisor password updated successfully!');
+        setShowAdminPasswordModal(false);
+        setAdminCurrentPassword('');
+        setAdminNewPassword('');
+        setAdminConfirmPassword('');
+      } else {
+        toast.error(data.error || 'Failed to update admin password');
+      }
+    } catch (err) {
+      toast.error('Network error while updating supervisor password');
+    } finally {
+      setAdminPasswordLoading(false);
+    }
+  }
+
+  // Month navigation helpers
+  const currentSelectedYear = parseInt(adminMonth.slice(0, 4), 10) || new Date().getFullYear();
+  const currentSelectedMonthNum = parseInt(adminMonth.slice(5, 7), 10) || new Date().getMonth() + 1;
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentMonthDisplayName = MONTH_NAMES[currentSelectedMonthNum - 1] || 'Month';
+
+  function handlePrevMonth() {
+    let y = currentSelectedYear;
+    let m = currentSelectedMonthNum - 1;
+    if (m < 1) {
+      m = 12;
+      y -= 1;
+    }
+    setAdminMonth(`${y}-${String(m).padStart(2, '0')}`);
+  }
+
+  function handleNextMonth() {
+    let y = currentSelectedYear;
+    let m = currentSelectedMonthNum + 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    setAdminMonth(`${y}-${String(m).padStart(2, '0')}`);
+  }
+
+  function handleCurrentMonth() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    setAdminMonth(`${y}-${m}`);
   }
 
   // 7. Camera QR Scanner for Machine Control Panels
@@ -546,6 +673,17 @@ export default function PlantMaintenancePortal() {
               </button>
             )}
 
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={() => setShowAdminPasswordModal(true)}
+                className="text-[11px] sm:text-xs bg-amber-950/80 hover:bg-amber-900 border border-amber-600/80 text-amber-300 px-2.5 py-1 sm:py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition"
+                title="Supervisor Security & Admin Password Settings"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>Admin Password</span>
+              </button>
+            )}
+
             {currentUser && (
               <button
                 onClick={handleLogout}
@@ -574,7 +712,11 @@ export default function PlantMaintenancePortal() {
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl mb-5 border border-slate-800">
               <button
                 type="button"
-                onClick={() => setAuthRole('tech')}
+                onClick={() => {
+                  setAuthRole('tech');
+                  setPassInput('');
+                  setLoginError('');
+                }}
                 className={`py-2.5 text-xs font-bold rounded-lg transition ${
                   authRole === 'tech' ? 'bg-amber-500 text-slate-950 shadow font-black' : 'text-slate-400'
                 }`}
@@ -583,7 +725,12 @@ export default function PlantMaintenancePortal() {
               </button>
               <button
                 type="button"
-                onClick={() => setAuthRole('admin')}
+                onClick={() => {
+                  setAuthRole('admin');
+                  setPassInput('');
+                  setEpfInput('');
+                  setLoginError('');
+                }}
                 className={`py-2.5 text-xs font-bold rounded-lg transition ${
                   authRole === 'admin' ? 'bg-amber-500 text-slate-950 shadow font-black' : 'text-slate-400'
                 }`}
@@ -602,11 +749,11 @@ export default function PlantMaintenancePortal() {
                     type="text"
                     value={epfInput}
                     onChange={(e) => setEpfInput(e.target.value.toUpperCase())}
-                    placeholder="e.g. EPF-4820"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    placeholder="Enter EPF (e.g. EPF-3520)"
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono font-bold text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                     required
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">First-time login default password: <b>tech123</b></p>
+                  <p className="text-[10px] text-slate-500 mt-1.5">First-time login demo password: <b className="text-amber-400">tech123</b> (changeable in profile)</p>
                 </div>
               )}
 
@@ -617,7 +764,7 @@ export default function PlantMaintenancePortal() {
                     type={showPass ? 'text' : 'password'}
                     value={passInput}
                     onChange={(e) => setPassInput(e.target.value)}
-                    placeholder="Enter password"
+                    placeholder={authRole === 'admin' ? 'Enter Supervisor password' : 'Enter technician password'}
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                     required
                   />
@@ -1250,19 +1397,113 @@ export default function PlantMaintenancePortal() {
                 >
                   <Printer className="w-4 h-4" /> Station QR Tags
                 </button>
+                <button
+                  onClick={() => setShowAdminPasswordModal(true)}
+                  className="bg-amber-950/80 hover:bg-amber-900 border border-amber-600/80 text-amber-300 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow transition"
+                >
+                  <KeyRound className="w-4 h-4 text-amber-400" /> Change Admin Password
+                </button>
               </div>
             </div>
 
             {/* KPI Metrics */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 text-white shadow-sm">
-                <span className="text-xs text-slate-400 font-semibold uppercase">Inspection Month</span>
-                <input
-                  type="month"
-                  value={adminMonth}
-                  onChange={(e) => setAdminMonth(e.target.value)}
-                  className="mt-1 w-full font-bold text-white bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-sm outline-none"
-                />
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 text-white shadow-sm relative">
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs text-slate-400 font-semibold uppercase flex items-center gap-1.5">
+                    <CalendarDays className="w-3.5 h-3.5 text-amber-400" />
+                    Inspection Month
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCurrentMonth}
+                    className="text-[10px] font-black text-amber-400 hover:text-amber-300 bg-amber-950/80 hover:bg-amber-900 px-2 py-0.5 rounded transition border border-amber-800/60"
+                    title="Jump to current month"
+                  >
+                    Current
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    className="w-8 h-8 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold flex items-center justify-center transition border border-slate-800"
+                    title="Previous Month"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                    className="flex-1 py-1 px-2 bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 flex items-center justify-center gap-1.5 font-black text-white text-xs sm:text-sm transition text-center group"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                    <span className="truncate">{currentMonthDisplayName} {currentSelectedYear}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    className="w-8 h-8 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold flex items-center justify-center transition border border-slate-800"
+                    title="Next Month"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Popover Month-Year Selector Dropdown */}
+                {showMonthDropdown && (
+                  <div className="absolute top-full left-0 mt-2 z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl p-4 w-72 text-white">
+                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-800">
+                      <span className="font-extrabold text-xs text-slate-300">Choose Month & Year</span>
+                      <div className="flex items-center gap-1 font-bold text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setAdminMonth(`${currentSelectedYear - 1}-${String(currentSelectedMonthNum).padStart(2, '0')}`)}
+                          className="p-1 hover:bg-slate-800 rounded text-slate-400 font-bold"
+                          title="Previous Year"
+                        >
+                          ◀
+                        </button>
+                        <span className="font-black text-amber-400 px-1">{currentSelectedYear}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAdminMonth(`${currentSelectedYear + 1}-${String(currentSelectedMonthNum).padStart(2, '0')}`)}
+                          className="p-1 hover:bg-slate-800 rounded text-slate-400 font-bold"
+                          title="Next Year"
+                        >
+                          ▶
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {MONTH_NAMES.map((name, idx) => {
+                        const mNum = idx + 1;
+                        const isSelected = mNum === currentSelectedMonthNum;
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => {
+                              setAdminMonth(`${currentSelectedYear}-${String(mNum).padStart(2, '0')}`);
+                              setShowMonthDropdown(false);
+                            }}
+                            className={`py-2 px-1 text-xs rounded-xl font-bold transition ${
+                              isSelected
+                                ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                                : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                            }`}
+                          >
+                            {name.slice(0, 3)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 text-white shadow-sm">
                 <span className="text-xs text-slate-400 font-semibold uppercase">Filter Plant</span>
@@ -1325,50 +1566,77 @@ export default function PlantMaintenancePortal() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStations.map((st) =>
-                      st.items.map((it, idx) => {
-                        return (
-                          <tr key={`${st.id}-${idx}`} className="hover:bg-slate-800/50 border-b border-slate-800/80">
-                            <td className="p-2 border border-slate-800 sticky left-0 bg-slate-900 font-bold z-10 text-white">
-                              {it.eq}
-                            </td>
-                            <td className="p-2 border border-slate-800 sticky left-[140px] bg-slate-900 z-10 text-slate-200">
-                              {it.it}
-                            </td>
-                            <td className="p-2 border border-slate-800 text-slate-400 text-[11px]">{it.lf}</td>
-                            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
-                              const sub = monthInspections.find((s) => s.stationId === st.id && s.day === d);
-                              const rec = sub?.records?.[idx];
-                              const status = rec?.status;
+                    {filteredStations.map((st) => (
+                      <React.Fragment key={st.id}>
+                        {st.items.map((it, idx) => {
+                          return (
+                            <tr key={`${st.id}-${idx}`} className="hover:bg-slate-800/50 border-b border-slate-800/80">
+                              <td className="p-2 border border-slate-800 sticky left-0 bg-slate-900 font-bold z-10 text-white">
+                                {it.eq}
+                              </td>
+                              <td className="p-2 border border-slate-800 sticky left-[140px] bg-slate-900 z-10 text-slate-200">
+                                {it.it}
+                              </td>
+                              <td className="p-2 border border-slate-800 text-slate-400 text-[11px]">{it.lf}</td>
+                              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
+                                const sub = monthInspections.find((s) => s.stationId === st.id && s.day === d);
+                                const rec = sub?.records?.[idx];
+                                const status = rec?.status;
 
-                              let cellColor = 'text-slate-700';
-                              let displayVal = '-';
+                                let cellColor = 'text-slate-700';
+                                let displayVal = '-';
 
-                              if (status === 'OK' || status === '√') {
-                                cellColor = 'bg-emerald-950/60 text-emerald-400 font-black';
-                                displayVal = '√';
-                              } else if (status === 'DEFECT' || status === 'X') {
-                                cellColor = 'bg-rose-950/80 text-rose-400 font-black';
-                                displayVal = 'X';
-                              } else if (status === 'STANDBY' || status === '0') {
-                                cellColor = 'bg-slate-800 text-slate-400';
-                                displayVal = '0';
-                              }
+                                if (status === 'OK' || status === '√') {
+                                  cellColor = 'bg-emerald-950/60 text-emerald-400 font-black';
+                                  displayVal = '√';
+                                } else if (status === 'DEFECT' || status === 'X') {
+                                  cellColor = 'bg-rose-950/80 text-rose-400 font-black';
+                                  displayVal = 'X';
+                                } else if (status === 'STANDBY' || status === '0') {
+                                  cellColor = 'bg-slate-800 text-slate-400';
+                                  displayVal = '0';
+                                }
 
-                              return (
-                                <td
-                                  key={d}
-                                  onClick={() => rec && setSelectedCellAudit({ sub, rec, st, day: d })}
-                                  className={`p-1 border border-slate-800 text-center cursor-pointer transition ${cellColor}`}
-                                >
-                                  {displayVal}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })
-                    )}
+                                return (
+                                  <td
+                                    key={d}
+                                    onClick={() => rec && setSelectedCellAudit({ sub, rec, st, day: d })}
+                                    className={`p-1 border border-slate-800 text-center cursor-pointer transition ${cellColor}`}
+                                    title={sub?.epf ? `Inspector: ${sub.epf}` : undefined}
+                                  >
+                                    {displayVal}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                        {/* Station Inspector Sign-off Row */}
+                        <tr key={`${st.id}-inspector-sign`} className="bg-amber-950/40 border-b-2 border-amber-800/60">
+                          <td className="p-2 border border-slate-800 sticky left-0 bg-slate-950 font-black z-10 text-amber-400 text-[11px]">
+                            {st.code}
+                          </td>
+                          <td className="p-2 border border-slate-800 sticky left-[140px] bg-slate-950 z-10 font-bold text-amber-300 text-[11px]">
+                            Technician Sign-off
+                          </td>
+                          <td className="p-2 border border-slate-800 text-amber-400/80 text-[11px] font-semibold">
+                            Verified Inspector EPF
+                          </td>
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
+                            const sub = monthInspections.find((s) => s.stationId === st.id && s.day === d);
+                            return (
+                              <td
+                                key={d}
+                                className="p-1 border border-slate-800 text-center font-mono font-bold text-[10px] text-amber-300 bg-amber-950/20"
+                                title={sub?.epf ? `Inspected by ${sub.epf}` : 'Not Inspected'}
+                              >
+                                {sub?.epf ? sub.epf.replace('EPF-', '') : '-'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </React.Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1467,6 +1735,93 @@ export default function PlantMaintenancePortal() {
           </div>
         )}
 
+        {/* SUPERVISOR / ADMIN PASSWORD MAINTENANCE MODAL */}
+        {showAdminPasswordModal && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 text-white shadow-2xl space-y-5">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-950/80 border border-amber-600/80 text-amber-400 flex items-center justify-center font-bold">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-white text-base">Admin Security</h3>
+                    <p className="text-xs text-slate-400">Update Supervisor Portal Password</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAdminPasswordModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2 bg-amber-950/40 p-4 rounded-2xl border border-amber-800/60 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-amber-300 font-semibold">Account:</span>
+                  <span className="font-bold text-amber-200">Plant Supervisor / Admin</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-amber-300 font-semibold">Default Initial Password:</span>
+                  <span className="font-mono text-amber-200 font-bold">admin123</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleAdminPasswordChange} className="space-y-3.5">
+                <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>Change Supervisor Password</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">Current Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={adminCurrentPassword}
+                    onChange={(e) => setAdminCurrentPassword(e.target.value)}
+                    placeholder="Enter current password (default: admin123)"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={adminNewPassword}
+                    onChange={(e) => setAdminNewPassword(e.target.value)}
+                    placeholder="Minimum 4 characters"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={adminConfirmPassword}
+                    onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={adminPasswordLoading}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/25 transition disabled:opacity-50"
+                >
+                  {adminPasswordLoading ? 'Updating Supervisor Password...' : 'Save New Admin Password'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* CELL AUDIT DETAIL MODAL */}
         {selectedCellAudit && (
           <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -1527,14 +1882,16 @@ export default function PlantMaintenancePortal() {
                   </div>
                 )}
 
-                <div className="p-3 border border-slate-800 bg-slate-950 rounded-xl space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Inspector EPF:</span>
-                    <b className="font-mono text-amber-300">{selectedCellAudit.sub.epf}</b>
+                <div className="p-3 border border-slate-800 bg-slate-950 rounded-xl space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold">Verified Inspector:</span>
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-950/80 text-amber-300 border border-amber-800/80 font-mono font-black text-xs">
+                      {selectedCellAudit.sub.epf}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Inspection Time:</span>
-                    <b>{new Date(selectedCellAudit.sub.submittedAt).toLocaleString()}</b>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-semibold">Inspection Time:</span>
+                    <b className="text-slate-200">{new Date(selectedCellAudit.sub.submittedAt).toLocaleString()}</b>
                   </div>
                 </div>
 

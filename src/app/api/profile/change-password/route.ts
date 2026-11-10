@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     if (!epf || !currentPassword || !newPassword) {
       return NextResponse.json(
-        { success: false, error: 'EPF, current password, and new password are required' },
+        { success: false, error: 'EPF / username, current password, and new password are required' },
         { status: 400 }
       );
     }
@@ -20,51 +20,64 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find technician user
-    let user = await db.user.findUnique({
-      where: { epf: epf.trim().toUpperCase() },
+    const rawEpf = (epf || '').trim();
+    const isAdmin = rawEpf.toLowerCase() === 'admin';
+    const targetEpf = isAdmin ? 'admin' : rawEpf.toUpperCase();
+
+    // Find user (Technician or Admin)
+    let user = await db.user.findFirst({
+      where: isAdmin
+        ? { OR: [{ epf: 'admin' }, { epf: 'ADMIN' }, { role: 'SUPERVISOR' }] }
+        : { epf: targetEpf },
     });
 
-    // If user does not exist yet in DB, create user with default or current password
+    // If user record does not exist in DB yet, verify initial default password
     if (!user) {
-      if (currentPassword === 'tech123') {
+      const defaultPass = isAdmin ? 'admin123' : 'tech123';
+      const isDefaultMatch =
+        currentPassword === defaultPass || (isAdmin && currentPassword === 'admin');
+
+      if (isDefaultMatch) {
         user = await db.user.create({
           data: {
-            epf: epf.trim().toUpperCase(),
-            name: `Technician (${epf.trim().toUpperCase()})`,
+            epf: targetEpf,
+            name: isAdmin ? 'Plant Supervisor / Admin' : `Technician (${targetEpf})`,
             password: newPassword,
-            role: 'TECHNICIAN',
+            role: isAdmin ? 'SUPERVISOR' : 'TECHNICIAN',
           },
         });
         return NextResponse.json({
           success: true,
-          message: 'Password created successfully for your EPF profile!',
+          message: `${isAdmin ? 'Admin' : 'Technician'} password set successfully!`,
         });
       } else {
         return NextResponse.json(
-          { success: false, error: 'Incorrect current password. Default password is "tech123".' },
+          {
+            success: false,
+            error: `Incorrect current password. Default initial password is "${defaultPass}".`,
+          },
           { status: 401 }
         );
       }
     }
 
-    // Verify current password
-    if (user.password !== currentPassword) {
+    // Verify current password against DB
+    if (user.password !== currentPassword && !(isAdmin && user.password === 'admin123' && currentPassword === 'admin')) {
       return NextResponse.json(
         { success: false, error: 'Current password is incorrect' },
         { status: 401 }
       );
     }
 
-    // Update password
+    // Update password in DB
     await db.user.update({
-      where: { epf: user.epf },
+      where: { id: user.id },
       data: { password: newPassword },
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Password updated successfully! Use your new password on your next login.',
+      message: `${isAdmin ? 'Admin' : 'Technician'} password updated successfully! Use your new password on your next login.`,
     });
   } catch (error: any) {
     console.error('Password change error:', error);

@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
           },
         },
         station: true,
+        user: true,
       },
       orderBy: { submittedAt: 'desc' },
     });
@@ -77,13 +78,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const cleanEpf = (epf || 'EPF-TECH').trim().toUpperCase();
+    const matchedUser = await db.user.findUnique({
+      where: { epf: cleanEpf },
+    });
+
     // Save or update inspection
     const saved = await db.inspection.upsert({
       where: { id },
       create: {
         id,
         stationId,
-        epf: epf || 'EPF-TECH',
+        userId: matchedUser?.id || null,
+        epf: cleanEpf,
         inspectionDate: inspectionDate || new Date().toISOString().slice(0, 10),
         day: day || new Date().getDate(),
         month: month || new Date().toISOString().slice(0, 7),
@@ -91,6 +98,8 @@ export async function POST(request: NextRequest) {
         lastModifiedAt: BigInt(now),
       },
       update: {
+        epf: cleanEpf,
+        userId: matchedUser?.id || undefined,
         lastModifiedAt: BigInt(now),
       },
     });
