@@ -5,8 +5,24 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { epf, currentPassword, newPassword } = body;
+    const rawEpf = typeof epf === 'string' ? epf.trim() : '';
 
-    if (!epf || !currentPassword || !newPassword) {
+    if (!rawEpf) {
+      return NextResponse.json(
+        { success: false, error: 'EPF / username is required' },
+        { status: 400 }
+      );
+    }
+
+    const isAdmin = rawEpf.toLowerCase() === 'admin';
+    if (!isAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Technician passwords cannot be changed' },
+        { status: 403 }
+      );
+    }
+
+    if (!currentPassword || !newPassword) {
       return NextResponse.json(
         { success: false, error: 'EPF / username, current password, and new password are required' },
         { status: 400 }
@@ -20,35 +36,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rawEpf = (epf || '').trim();
-    const isAdmin = rawEpf.toLowerCase() === 'admin';
-    const targetEpf = isAdmin ? 'admin' : rawEpf.toUpperCase();
+    const targetEpf = 'admin';
 
-    // Find user (Technician or Admin)
+    // Find the admin account.
     let user = await db.user.findFirst({
-      where: isAdmin
-        ? { OR: [{ epf: 'admin' }, { epf: 'ADMIN' }, { role: 'SUPERVISOR' }] }
-        : { epf: targetEpf },
+      where: { OR: [{ epf: 'admin' }, { epf: 'ADMIN' }, { role: 'SUPERVISOR' }] },
     });
 
     // If user record does not exist in DB yet, verify initial default password
     if (!user) {
-      const defaultPass = isAdmin ? 'admin123' : 'tech123';
-      const isDefaultMatch =
-        currentPassword === defaultPass || (isAdmin && currentPassword === 'admin');
+      const defaultPass = 'admin123';
+      const isDefaultMatch = currentPassword === defaultPass || currentPassword === 'admin';
 
       if (isDefaultMatch) {
         user = await db.user.create({
           data: {
             epf: targetEpf,
-            name: isAdmin ? 'Plant Supervisor / Admin' : `Technician (${targetEpf})`,
+            name: 'Admin',
             password: newPassword,
-            role: isAdmin ? 'SUPERVISOR' : 'TECHNICIAN',
+            role: 'SUPERVISOR',
           },
         });
         return NextResponse.json({
           success: true,
-          message: `${isAdmin ? 'Admin' : 'Technician'} password set successfully!`,
+          message: 'Admin password set successfully!',
         });
       } else {
         return NextResponse.json(
@@ -62,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify current password against DB
-    if (user.password !== currentPassword && !(isAdmin && user.password === 'admin123' && currentPassword === 'admin')) {
+    if (user.password !== currentPassword && !(user.password === 'admin123' && currentPassword === 'admin')) {
       return NextResponse.json(
         { success: false, error: 'Current password is incorrect' },
         { status: 401 }
@@ -77,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${isAdmin ? 'Admin' : 'Technician'} password updated successfully! Use your new password on your next login.`,
+      message: 'Admin password updated successfully! Use your new password on your next login.',
     });
   } catch (error: any) {
     console.error('Password change error:', error);
