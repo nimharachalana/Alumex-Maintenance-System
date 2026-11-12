@@ -9,7 +9,8 @@ const ALLOWED_EPFS = [
   'EPF-2712',
   'EPF-3457',
   'EPF-3174',
-  'EPF-4040'
+  'EPF-4040',
+  'EPF-2298'
 ];
 
 export async function POST(request: NextRequest) {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
           adminUser = await db.user.create({
             data: {
               epf: 'admin',
-              name: 'Plant Supervisor / Admin',
+              name: 'Admin',
               password: 'admin123',
               role: 'SUPERVISOR',
             },
@@ -111,8 +112,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Strict password verification: user.password must equal trimmedPass
-    if (user.password !== trimmedPass) {
+    // All technicians use the same fixed password.
+    if (trimmedPass !== 'tech123') {
       return NextResponse.json(
         { success: false, error: 'Incorrect password for this EPF profile' },
         { status: 401 }

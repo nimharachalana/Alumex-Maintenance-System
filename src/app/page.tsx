@@ -43,7 +43,8 @@ const ALLOWED_TECHNICIAN_EPFS = [
   'EPF-2712',
   'EPF-3457',
   'EPF-3174',
-  'EPF-4040'
+  'EPF-4040',
+  'EPF-2298'
 ];
 
 interface CurrentUser {
@@ -61,13 +62,6 @@ export default function PlantMaintenancePortal() {
   const [showPass, setShowPass] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-
-  // Profile & Password Change State (Technician)
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
-  const [newPasswordInput, setNewPasswordInput] = useState('');
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
-  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
 
   // Admin Password Change State
   const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
@@ -306,45 +300,6 @@ export default function PlantMaintenancePortal() {
     setCurrentStation(null);
     localStorage.removeItem('alumex_next_session');
     toast.info('Logged out from portal.');
-  }
-
-  // 6. Change Password Handler (Profile Maintenance)
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
-    if (!currentUser?.epf) return;
-
-    if (newPasswordInput !== confirmPasswordInput) {
-      toast.error('New passwords do not match');
-      return;
-    }
-
-    setPasswordChangeLoading(true);
-    try {
-      const res = await fetch('/api/profile/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          epf: currentUser.epf,
-          currentPassword: currentPasswordInput,
-          newPassword: newPasswordInput
-        })
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message || 'Password changed successfully!');
-        setShowProfileModal(false);
-        setCurrentPasswordInput('');
-        setNewPasswordInput('');
-        setConfirmPasswordInput('');
-      } else {
-        toast.error(data.error || 'Failed to update password');
-      }
-    } catch (err) {
-      toast.error('Network error while updating password');
-    } finally {
-      setPasswordChangeLoading(false);
-    }
   }
 
   // 6b. Supervisor / Admin Password Change Handler
@@ -663,14 +618,13 @@ export default function PlantMaintenancePortal() {
             )}
 
             {currentUser?.role === 'tech' && (
-              <button
-                onClick={() => setShowProfileModal(true)}
-                className="text-[11px] sm:text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 px-2.5 py-1 sm:py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition"
-                title="Profile & Password Maintenance"
+              <span
+                className="text-[11px] sm:text-xs bg-slate-800 border border-slate-700 text-amber-300 px-2.5 py-1 sm:py-1.5 rounded-lg font-bold flex items-center gap-1.5"
+                title="Technician account"
               >
                 <User className="w-3.5 h-3.5 text-amber-400" />
                 <span>{currentUser.epf}</span>
-              </button>
+              </span>
             )}
 
             {currentUser?.role === 'admin' && (
@@ -735,7 +689,7 @@ export default function PlantMaintenancePortal() {
                   authRole === 'admin' ? 'bg-amber-500 text-slate-950 shadow font-black' : 'text-slate-400'
                 }`}
               >
-                Supervisor
+                Admin
               </button>
             </div>
 
@@ -753,7 +707,7 @@ export default function PlantMaintenancePortal() {
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono font-bold text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                     required
                   />
-                  <p className="text-[10px] text-slate-500 mt-1.5">First-time login demo password: <b className="text-amber-400">tech123</b> (changeable in profile)</p>
+                  <p className="text-[10px] text-slate-500 mt-1.5">All technicians use the shared password: <b className="text-amber-400">tech123</b>. Password changes are disabled.</p>
                 </div>
               )}
 
@@ -764,7 +718,7 @@ export default function PlantMaintenancePortal() {
                     type={showPass ? 'text' : 'password'}
                     value={passInput}
                     onChange={(e) => setPassInput(e.target.value)}
-                    placeholder={authRole === 'admin' ? 'Enter Supervisor password' : 'Enter technician password'}
+                    placeholder={authRole === 'admin' ? 'Enter Admin password' : 'Enter technician password'}
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                     required
                   />
@@ -868,13 +822,12 @@ export default function PlantMaintenancePortal() {
                     Field Inspection Mode
                   </span>
                   <span className="text-xs font-bold text-slate-600">•</span>
-                  <button
-                    onClick={() => setShowProfileModal(true)}
-                    className="text-xs font-mono font-bold text-amber-300 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-md border border-slate-700 flex items-center gap-1"
+                  <span
+                    className="text-xs font-mono font-bold text-amber-300 bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700 flex items-center gap-1"
                   >
                     <User className="w-3 h-3 text-amber-400" />
                     <span>{currentUser.epf}</span>
-                  </button>
+                  </span>
                 </div>
                 <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
                   Plant Floor Maintenance Inspection
@@ -884,12 +837,11 @@ export default function PlantMaintenancePortal() {
                 </p>
               </div>
 
-              <button
-                onClick={() => setShowProfileModal(true)}
-                className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-500/50 active:scale-95 text-amber-400 hover:text-amber-300 px-3.5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm text-xs transition-all"
+              <div
+                className="w-full sm:w-auto bg-slate-800 border border-slate-700 text-amber-400 px-3.5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm text-xs"
               >
-                <KeyRound className="w-4 h-4" /> Change Password
-              </button>
+                <KeyRound className="w-4 h-4" /> Shared technician password: tech123 (cannot be changed)
+              </div>
             </div>
 
             {/* ================= STEP 1: SCANNER VIEWPORT ================= */}
@@ -1376,7 +1328,7 @@ export default function PlantMaintenancePortal() {
             <div className="bg-slate-900 p-5 rounded-2xl shadow-xl border border-slate-800 flex flex-wrap justify-between items-center gap-4 text-white">
               <div>
                 <span className="text-xs uppercase font-bold text-amber-400 tracking-wider">
-                  Engineering Supervisor Portal
+                  Admin Portal
                 </span>
                 <h2 className="text-xl font-black text-white">Plant Audit & Review Dashboard</h2>
                 <p className="text-xs text-slate-400 mt-0.5">
@@ -1644,97 +1596,6 @@ export default function PlantMaintenancePortal() {
           </div>
         )}
 
-        {/* TECHNICIAN PROFILE & PASSWORD MAINTENANCE MODAL */}
-        {showProfileModal && currentUser && (
-          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 text-white shadow-2xl space-y-5">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-white text-base">Technician Profile</h3>
-                    <p className="text-xs text-slate-400">Maintain credentials & security</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowProfileModal(false)}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-medium">EPF Number:</span>
-                  <span className="font-mono font-bold text-amber-400">{currentUser.epf || 'EPF-4820'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-medium">Role:</span>
-                  <span className="font-bold text-emerald-400 uppercase">{currentUser.role}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-medium">Auth Status:</span>
-                  <span className="text-slate-300">Default password is "tech123"</span>
-                </div>
-              </div>
-
-              <form onSubmit={handleChangePassword} className="space-y-3.5">
-                <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5 uppercase tracking-wider">
-                  <KeyRound className="w-4 h-4 text-amber-400" />
-                  <span>Change Password</span>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">Current Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={currentPasswordInput}
-                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
-                    placeholder="Default is tech123"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">New Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={newPasswordInput}
-                    onChange={(e) => setNewPasswordInput(e.target.value)}
-                    placeholder="At least 4 characters"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">Confirm New Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPasswordInput}
-                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
-                    placeholder="Re-enter new password"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={passwordChangeLoading}
-                  className="w-full py-3 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/25 transition disabled:opacity-50"
-                >
-                  {passwordChangeLoading ? 'Updating Password...' : 'Save New Password'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
         {/* SUPERVISOR / ADMIN PASSWORD MAINTENANCE MODAL */}
         {showAdminPasswordModal && (
           <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -1760,7 +1621,7 @@ export default function PlantMaintenancePortal() {
               <div className="space-y-2 bg-amber-950/40 p-4 rounded-2xl border border-amber-800/60 text-xs">
                 <div className="flex justify-between">
                   <span className="text-amber-300 font-semibold">Account:</span>
-                  <span className="font-bold text-amber-200">Plant Supervisor / Admin</span>
+                  <span className="font-bold text-amber-200">Admin</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-amber-300 font-semibold">Default Initial Password:</span>

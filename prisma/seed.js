@@ -231,13 +231,14 @@ async function main() {
     "EPF-2712",
     "EPF-3457",
     "EPF-3174",
-    "EPF-4040"
+    "EPF-4040",
+    "EPF-2298"
   ];
 
   for (const epfNo of technicianEpfs) {
     await prisma.user.upsert({
       where: { epf: epfNo },
-      update: {},
+      update: { password: "tech123" },
       create: {
         epf: epfNo,
         password: "tech123",
@@ -249,12 +250,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { epf: "admin" },
-    update: {},
+    update: { name: "Admin" },
     create: {
       epf: "admin",
       password: "admin123",
       role: "SUPERVISOR",
-      name: "Plant Supervisor / Admin"
+      name: "Admin"
     }
   });
 
@@ -307,7 +308,7 @@ async function main() {
     }
   }
 
-  console.log(`Seed successfully completed: ${allStations.length} stations, ${totalChecks} master checkpoints seeded into SQLite!`);
+  console.log(`Seed successfully completed: ${allStations.length} stations, ${totalChecks} checkpoint definitions processed in the database.`);
 }
 
 main()
