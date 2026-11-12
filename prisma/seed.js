@@ -307,7 +307,7 @@ async function main() {
     }
   }
 
-  console.log(`Seed successfully completed: ${allStations.length} stations, ${totalChecks} master checkpoints seeded into SQLite!`);
+  console.log(`Seed successfully completed: ${allStations.length} stations, ${totalChecks} checkpoint definitions processed in the database.`);
 }
 
 main()
